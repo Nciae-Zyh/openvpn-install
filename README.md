@@ -106,6 +106,8 @@ chmod +x openvpn-install.sh
 
 You need to run the script as root and have the TUN module enabled.
 
+**Docker deployment (host network):** To run OpenVPN in a container with host networking and persist config in a volume, see [deploy/README.md](deploy/README.md). You build the image, start the container, then run the script inside the container (e.g. `docker exec -it openvpn bash`).
+
 ### Interactive Mode
 
 The easiest way to get started is the interactive menu:
