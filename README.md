@@ -60,7 +60,7 @@ That said, OpenVPN still makes sense when you need:
 - Unprivileged mode: run as `nobody`/`nogroup`
 - Block DNS leaks on Windows 10
 - Randomised server certificate name
-- Choice to protect clients with a password (private key encryption)
+- First client is protected with a generated password (shown after install); optional password for further clients (private key encryption)
 - Option to allow multiple devices to use the same client profile simultaneously (disables persistent IP addresses)
 - **Peer fingerprint authentication** (OpenVPN 2.6+): Simplified WireGuard-like authentication without a CA
 - Many other little things!
@@ -317,17 +317,17 @@ The `install` command supports many options for customization:
 - `--cert-curve <curve>` - ECDSA curve (default: `prime256v1`). Options: `prime256v1`, `secp384r1`, `secp521r1`
 - `--rsa-bits <2048|3072|4096>` - RSA key size (default: `2048`)
 - `--hmac <alg>` - HMAC algorithm (default: `SHA256`). Options: `SHA256`, `SHA384`, `SHA512`
-- `--tls-sig <mode>` - TLS mode (default: `crypt-v2`). Options: `crypt-v2`, `crypt`, `auth`
+- `--tls-sig <mode>` - TLS mode (default: `crypt`). Options: `crypt-v2`, `crypt`, `auth`
 - `--auth-mode <mode>` - Authentication mode (default: `pki`). Options: `pki` (CA-based), `fingerprint` (peer-fingerprint, requires OpenVPN 2.6+)
 - `--tls-version-min <1.2|1.3>` - Minimum TLS version (default: `1.2`)
 - `--tls-ciphersuites <list>` - TLS 1.3 cipher suites, colon-separated (default: `TLS_AES_256_GCM_SHA384:TLS_AES_128_GCM_SHA256:TLS_CHACHA20_POLY1305_SHA256`)
-- `--tls-groups <list>` - Key exchange groups, colon-separated (default: `X25519:prime256v1:secp384r1:secp521r1`)
+- `--tls-groups <list>` - Key exchange groups, colon-separated (default: `prime256v1`)
 - `--server-cert-days <n>` - Server cert validity in days (default: `3650`)
 
 **Client Options:**
 
 - `--client <name>` - Initial client name (default: `client`)
-- `--client-password [pass]` - Password-protect client key (default: no password)
+- `--client-password [pass]` - First client key is password-protected by default (a random password is generated and shown after install). Pass a value to set your own password.
 - `--client-cert-days <n>` - Client cert validity in days (default: `3650`)
 - `--no-client` - Skip initial client creation
 
@@ -584,18 +584,20 @@ OpenVPN historically defaulted to 2048-bit DH parameters for key exchange. This 
 
 OpenVPN 2.4 added ECDH support, and OpenVPN 2.7 made `dh none` (ECDH) the default, as finite-field DH is being deprecated. Since ECDH is now universally supported and preferred, this script no longer offers traditional DH.
 
-The script configures `tls-groups` with the following preference list:
+The script defaults to a single curve for performance:
 
 ```
-X25519:prime256v1:secp384r1:secp521r1
+prime256v1
 ```
+
+You can use multiple curves (colon-separated), e.g. `X25519:prime256v1:secp384r1:secp521r1`:
 
 - **X25519**: Fast, modern curve (Curve25519), widely supported
-- **prime256v1**: NIST P-256, most compatible
+- **prime256v1**: NIST P-256, most compatible (default)
 - **secp384r1**: NIST P-384, higher security
 - **secp521r1**: NIST P-521, highest security
 
-You can customize this with `--tls-groups`.
+Customize with `--tls-groups`.
 
 ### HMAC digest algorithm
 
@@ -643,8 +645,8 @@ So both provide an additional layer of security and mitigate DoS attacks. They a
 
 The script supports all three options:
 
-- `tls-crypt-v2` (default): Per-client keys for better security
-- `tls-crypt`: Shared key for all clients, compatible with OpenVPN 2.4+
+- `tls-crypt` (default): Shared key for all clients, compatible with OpenVPN 2.4+, good performance
+- `tls-crypt-v2`: Per-client keys for better security
 - `tls-auth`: HMAC authentication only (no encryption), compatible with older clients
 
 ### Certificate type verification (`remote-cert-tls`)

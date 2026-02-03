@@ -27,6 +27,14 @@ For client renewals, a new `.ovpn` file will be generated that you need to distr
 
 ---
 
+**Q:** 如何备份和恢复 OpenVPN 配置？
+
+**A:** 在管理菜单中：
+- **备份配置（压缩包）**（选项 13）：将 `/etc/openvpn` 打包为 `openvpn-backup-YYYYMMDD-HHMMSS.tar.gz`，可指定保存路径。卸载前也会提示是否先备份。
+- **导入配置**（选项 14）：从本脚本生成的 `.tar.gz` 或 `.tgz`、`.tar` 备份恢复，会先停止服务、覆盖 `/etc/openvpn` 后解压并启动服务。建议导入后执行一次「修复 OpenVPN systemd 服务」以确认 systemd 单元正确。
+
+---
+
 **Q:** How do I check for DNS leaks?
 
 **A:** Go to [browserleaks.com](https://browserleaks.com/dns) or [ipleak.net](https://ipleak.net/) (both perform IPv4 and IPv6 check) with your browser. Your IP should not show up (test without and without the VPN). The DNS servers should be the ones you selected during the setup, not your IP address nor your ISP's DNS servers' addresses.
@@ -75,6 +83,47 @@ down /usr/share/openvpn/contrib/pull-resolv-conf/client.down
 **Q:** IPv6 is not working on my Hetzner VM
 
 **A:** This an issue on their side. See <https://angristan.xyz/fix-ipv6-hetzner-cloud/>
+
+---
+
+**Q:** 如何启用数据通道卸载 (DCO)？安装时提示「DCO 不可用」。
+
+**A:** DCO（Data Channel Offload）可将加解密卸载到内核，提升吞吐与延迟。需同时满足：
+
+1. **OpenVPN 2.6 及以上**  
+   使用脚本配置的官方源一般已是 2.6+；若为 2.5 及以下，请升级 OpenVPN。
+
+2. **内核支持**（二选一）  
+   - **方式一：内核 6.16 及以上**  
+     DCO 已并入主线内核，升级到 6.16+ 即可（需发行版提供该内核，如主线/backport）。  
+   - **方式二：安装 ovpn-dco 内核模块（推荐，适用于当前常见内核）**  
+     - **Debian / Ubuntu**：DKMS 需先安装**当前内核的头文件**才能编译模块，再安装 DCO 并加载：
+       ```bash
+       sudo apt update
+       sudo apt install -y linux-headers-$(uname -r)   # 或 linux-headers-amd64
+       sudo apt install -y openvpn-dco-dkms
+       sudo modprobe ovpn-dco
+       ```
+       若出现 `Module ovpn-dco not found in directory /lib/modules/...`，说明未装对应内核的 headers，按上顺序先装 `linux-headers-$(uname -r)` 再装 `openvpn-dco-dkms` 即可。重启 OpenVPN 服务后，脚本会检测到 DCO 可用。  
+     - **Fedora / RHEL 等**：若仓库提供 `openvpn-dco` 或 `kmod-ovpn-dco`，安装后执行 `modprobe ovpn-dco`。
+
+3. **协议与加密**  
+   DCO 仅在 **UDP**（或 udp6）且 **AEAD 加密**（如 AES-128-GCM、AES-256-GCM、CHACHA20-POLY1305）时启用。若当前为 TCP 或 CBC 加密，脚本会提示「DCO 可用但未启用」。
+
+安装好模块后无需改配置，只要协议为 UDP、加密为 GCM/ChaCha20，OpenVPN 2.6+ 会自动使用 DCO。详见 [OpenVPN DCO 文档](https://openvpn.net/as-docs/openvpn-dco.html)。
+
+---
+
+**Q:** I'm running OpenVPN in a VM. Will I get full performance?
+
+**A:** Virtualization adds some overhead (CPU, network I/O), so you may not reach the same throughput as on bare metal. To get the best performance in a VM:
+
+- Use **virtio** (or equivalent paravirtual) network and disk drivers.
+- If the hypervisor supports it, use **host** or **passthrough** CPU mode so the guest can use the host’s CPU features (e.g. AES-NI for encryption).
+- Allocate enough vCPUs and RAM; single-threaded OpenVPN benefits from a fast CPU.
+- During install, choose **性能优化 → 高吞吐** (or “Performance optimization → High throughput”) to use larger socket buffers (sndbuf/rcvbuf 393216), which can help on high-bandwidth links.
+
+For most use cases (a few dozen Mbps to a few hundred Mbps), a well-configured VM is sufficient. For maximum throughput (e.g. multi-Gbps), bare metal or a dedicated VPN appliance is better.
 
 ---
 

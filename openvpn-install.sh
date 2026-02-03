@@ -67,7 +67,7 @@ log_error() {
 	echo -e "${COLOR_RED}[ERROR]${COLOR_RESET} $*" >&2
 	_log_to_file "[ERROR] $*"
 	if [[ -n "$LOG_FILE" ]]; then
-		echo -e "${COLOR_YELLOW}        Check the log file for details: ${LOG_FILE}${COLOR_RESET}" >&2
+		echo -e "${COLOR_YELLOW}        详见日志: ${LOG_FILE}${COLOR_RESET}" >&2
 	fi
 }
 
@@ -75,8 +75,8 @@ log_fatal() {
 	echo -e "${COLOR_RED}[ERROR]${COLOR_RESET} $*" >&2
 	_log_to_file "[FATAL] $*"
 	if [[ -n "$LOG_FILE" ]]; then
-		echo -e "${COLOR_YELLOW}        Check the log file for details: ${LOG_FILE}${COLOR_RESET}" >&2
-		_log_to_file "Script exited with error"
+		echo -e "${COLOR_YELLOW}        详见日志: ${LOG_FILE}${COLOR_RESET}" >&2
+		_log_to_file "脚本因错误退出"
 	fi
 	exit 1
 }
@@ -171,88 +171,91 @@ readonly SCRIPT_NAME="openvpn-install"
 # =============================================================================
 show_help() {
 	cat <<-EOF
-		OpenVPN installer and manager
+		OpenVPN 安装与管理脚本
 
-		Usage: $SCRIPT_NAME <command> [options]
+		用法: $SCRIPT_NAME [命令] [选项]
 
-		Commands:
-			install       Install and configure OpenVPN server
-			uninstall     Remove OpenVPN server
-			client        Manage client certificates
-			server        Server management
-			interactive   Launch interactive menu
+		无命令时默认进入交互模式：未安装则进入安装，已安装则进入管理菜单。
 
-		Global Options:
-			--verbose     Show detailed output
-			--log <path>  Log file path (default: openvpn-install.log)
-			--no-log      Disable file logging
-			--no-color    Disable colored output
-			-h, --help    Show help
+		命令:
+			install       安装并配置 OpenVPN 服务端
+			uninstall     卸载 OpenVPN 服务端
+			client        管理客户端证书
+			server        服务端管理
+			fix           修复 OpenVPN systemd 服务（WorkingDirectory 等，经典布局）
+			interactive   启动交互式菜单（与无命令时行为相同）
 
-		Run '$SCRIPT_NAME <command> --help' for command-specific help.
+		全局选项:
+			--verbose     显示详细输出
+			--log <路径>  日志文件路径（默认: openvpn-install.log）
+			--no-log      关闭文件日志
+			--no-color    关闭彩色输出
+			-h, --help    显示帮助
+
+		使用 '$SCRIPT_NAME <命令> --help' 查看各命令的详细帮助。
 	EOF
 }
 
 show_install_help() {
 	cat <<-EOF
-		Install and configure OpenVPN server
+		安装并配置 OpenVPN 服务端
 
-		Usage: $SCRIPT_NAME install [options]
+		用法: $SCRIPT_NAME install [选项]
 
-		Options:
-			-i, --interactive     Run interactive install wizard
+		选项:
+			-i, --interactive     运行交互式安装向导
 
-		Network Options:
-			--endpoint <host>     Public IP or hostname for clients (auto-detected)
-			--endpoint-type <4|6> Endpoint IP version: 4 or 6 (default: 4)
-			--ip <addr>           Server listening IP (auto-detected)
-			--client-ipv4         Enable IPv4 for VPN clients (default: enabled)
-			--no-client-ipv4      Disable IPv4 for VPN clients
-			--client-ipv6         Enable IPv6 for VPN clients
-			--no-client-ipv6      Disable IPv6 for VPN clients (default)
-			--subnet-ipv4 <x.x.x.0>  IPv4 VPN subnet (default: 10.8.0.0)
-			--subnet-ipv6 <prefix>   IPv6 VPN subnet (default: fd42:42:42:42::)
-			--port <num>          OpenVPN port (default: 1194)
-			--port-random         Use random port (49152-65535)
-			--protocol <proto>    Protocol: udp or tcp (default: udp)
-			--mtu <size>          Tunnel MTU (default: 1500)
+		网络选项:
+			--endpoint <主机>     客户端连接用的公网 IP 或主机名（自动检测）
+			--endpoint-type <4|6> 端点 IP 版本: 4 或 6（默认: 4）
+			--ip <地址>           服务端监听 IP（自动检测）
+			--client-ipv4         为 VPN 客户端启用 IPv4（默认: 启用）
+			--no-client-ipv4      禁用 VPN 客户端 IPv4
+			--client-ipv6         为 VPN 客户端启用 IPv6
+			--no-client-ipv6      禁用 VPN 客户端 IPv6（默认）
+			--subnet-ipv4 <x.x.x.0>  IPv4 VPN 网段（默认: 10.8.0.0）
+			--subnet-ipv6 <前缀>     IPv6 VPN 网段（默认: fd42:42:42:42::）
+			--port <端口>          OpenVPN 端口（默认: 1194）
+			--port-random         使用随机端口（49152-65535）
+			--protocol <协议>     协议: udp 或 tcp（默认: udp）
+			--mtu <大小>          隧道 MTU（默认: 1500）
 
-		DNS Options:
-			--dns <provider>      DNS provider (default: cloudflare)
-				Providers: system, unbound, cloudflare, quad9, quad9-uncensored,
+		DNS 选项:
+			--dns <提供商>       DNS 提供商（默认: adguard）
+				可选: system, unbound, cloudflare, quad9, quad9-uncensored,
 				fdn, dnswatch, opendns, google, yandex, adguard, nextdns, custom
-			--dns-primary <ip>    Custom primary DNS (requires --dns custom)
-			--dns-secondary <ip>  Custom secondary DNS (optional)
+			--dns-primary <ip>    自定义主 DNS（需配合 --dns custom）
+			--dns-secondary <ip>  自定义备用 DNS（可选）
 
-		Security Options:
-			--cipher <cipher>     Data channel cipher (default: AES-128-GCM)
-				Ciphers: AES-128-GCM, AES-192-GCM, AES-256-GCM, AES-128-CBC,
+		安全选项:
+			--cipher <算法>       数据通道加密（默认: AES-128-GCM）
+				可选: AES-128-GCM, AES-192-GCM, AES-256-GCM, AES-128-CBC,
 				AES-192-CBC, AES-256-CBC, CHACHA20-POLY1305
-			--cert-type <type>    Certificate type: ecdsa or rsa (default: ecdsa)
-			--cert-curve <curve>  ECDSA curve (default: prime256v1)
-				Curves: prime256v1, secp384r1, secp521r1
-			--rsa-bits <size>     RSA key size: 2048, 3072, 4096 (default: 2048)
-			--cc-cipher <cipher>  Control channel cipher (auto-selected)
-			--tls-version-min <ver>  Minimum TLS version: 1.2 or 1.3 (default: 1.2)
-			--tls-ciphersuites <list>  TLS 1.3 cipher suites, colon-separated
-			--tls-groups <list>   Key exchange groups, colon-separated
-				(default: X25519:prime256v1:secp384r1:secp521r1)
-			--hmac <alg>          HMAC algorithm: SHA256, SHA384, SHA512 (default: SHA256)
-			--tls-sig <mode>      TLS mode: crypt-v2, crypt, auth (default: crypt-v2)
-			--auth-mode <mode>    Auth mode: pki, fingerprint (default: pki)
-				fingerprint requires OpenVPN 2.6+
-			--server-cert-days <n>  Server cert validity in days (default: 3650)
+			--cert-type <类型>    证书类型: ecdsa 或 rsa（默认: ecdsa）
+			--cert-curve <曲线>   ECDSA 曲线（默认: prime256v1）
+				可选: prime256v1, secp384r1, secp521r1
+			--rsa-bits <位数>     RSA 密钥长度: 2048, 3072, 4096（默认: 2048）
+			--cc-cipher <算法>    控制通道加密（自动选择）
+			--tls-version-min <版本>  最低 TLS 版本: 1.2 或 1.3（默认: 1.2）
+			--tls-ciphersuites <列表>  TLS 1.3 加密套件，冒号分隔
+			--tls-groups <列表>   密钥交换组，冒号分隔
+				（默认: prime256v1）
+			--hmac <算法>         HMAC 算法: SHA256, SHA384, SHA512（默认: SHA256）
+			--tls-sig <模式>      TLS 模式: crypt-v2, crypt, auth（默认: crypt）
+			--auth-mode <模式>    认证模式: pki, fingerprint（默认: pki）
+				fingerprint 需 OpenVPN 2.6+
+			--server-cert-days <天数>  服务端证书有效期（默认: 3650）
 
-		Other Options:
-			--multi-client        Allow same cert on multiple devices
+		其他选项:
+			--multi-client        允许同一证书在多个设备使用
 
-		Initial Client Options:
-			--client <name>       Initial client name (default: client)
-			--client-password [p] Password-protect client (prompts if no value given)
-			--client-cert-days <n>  Client cert validity in days (default: 3650)
-			--no-client           Skip initial client creation
+		初始客户端选项:
+			--client <名称>       首个客户端名称（默认: client）
+			--client-password [密码]  为首个客户端设置密码（不填则自动生成并在安装完成后显示）
+			--client-cert-days <天数>  客户端证书有效期（默认: 3650）
+			--no-client           跳过创建首个客户端
 
-		Examples:
+		示例:
 			$SCRIPT_NAME install
 			$SCRIPT_NAME install --port 443 --protocol tcp
 			$SCRIPT_NAME install --dns quad9 --cipher AES-256-GCM
@@ -262,14 +265,14 @@ show_install_help() {
 
 show_uninstall_help() {
 	cat <<-EOF
-		Remove OpenVPN server
+		卸载 OpenVPN 服务端
 
-		Usage: $SCRIPT_NAME uninstall [options]
+		用法: $SCRIPT_NAME uninstall [选项]
 
-		Options:
-			-f, --force   Skip confirmation prompt
+		选项:
+			-f, --force   跳过确认提示
 
-		Examples:
+		示例:
 			$SCRIPT_NAME uninstall
 			$SCRIPT_NAME uninstall --force
 	EOF
@@ -277,32 +280,32 @@ show_uninstall_help() {
 
 show_client_help() {
 	cat <<-EOF
-		Manage client certificates
+		管理客户端证书
 
-		Usage: $SCRIPT_NAME client <subcommand> [options]
+		用法: $SCRIPT_NAME client <子命令> [选项]
 
-		Subcommands:
-			add <name>     Add a new client
-			list           List all clients
-			revoke <name>  Revoke a client certificate
-			renew <name>   Renew a client certificate
+		子命令:
+			add <名称>     添加新客户端
+			list           列出所有客户端
+			revoke <名称>  吊销客户端证书
+			renew <名称>   续期客户端证书
 
-		Run '$SCRIPT_NAME client <subcommand> --help' for more info.
+		使用 '$SCRIPT_NAME client <子命令> --help' 查看详细帮助。
 	EOF
 }
 
 show_client_add_help() {
 	cat <<-EOF
-		Add a new VPN client
+		添加新的 VPN 客户端
 
-		Usage: $SCRIPT_NAME client add <name> [options]
+		用法: $SCRIPT_NAME client add <名称> [选项]
 
-		Options:
-			--password [pass]   Password-protect client (prompts if no value given)
-			--cert-days <n>     Certificate validity in days (default: 3650)
-			--output <path>     Output path for .ovpn file (default: ~/<name>.ovpn)
+		选项:
+			--password [密码]   为客户端设置密码（不填则提示输入）
+			--cert-days <天数>  证书有效期（默认: 3650）
+			--output <路径>     .ovpn 文件输出路径（默认: ~/<名称>.ovpn）
 
-		Examples:
+		示例:
 			$SCRIPT_NAME client add alice
 			$SCRIPT_NAME client add bob --password
 			$SCRIPT_NAME client add charlie --cert-days 365 --output /tmp/charlie.ovpn
@@ -311,14 +314,14 @@ show_client_add_help() {
 
 show_client_list_help() {
 	cat <<-EOF
-		List all client certificates
+		列出所有客户端证书
 
-		Usage: $SCRIPT_NAME client list [options]
+		用法: $SCRIPT_NAME client list [选项]
 
-		Options:
-			--format <fmt>  Output format: table or json (default: table)
+		选项:
+			--format <格式>  输出格式: table 或 json（默认: table）
 
-		Examples:
+		示例:
 			$SCRIPT_NAME client list
 			$SCRIPT_NAME client list --format json
 	EOF
@@ -326,14 +329,14 @@ show_client_list_help() {
 
 show_client_revoke_help() {
 	cat <<-EOF
-		Revoke a client certificate
+		吊销客户端证书
 
-		Usage: $SCRIPT_NAME client revoke <name> [options]
+		用法: $SCRIPT_NAME client revoke <名称> [选项]
 
-		Options:
-			-f, --force   Skip confirmation prompt
+		选项:
+			-f, --force   跳过确认提示
 
-		Examples:
+		示例:
 			$SCRIPT_NAME client revoke alice
 			$SCRIPT_NAME client revoke bob --force
 	EOF
@@ -341,14 +344,14 @@ show_client_revoke_help() {
 
 show_client_renew_help() {
 	cat <<-EOF
-		Renew a client certificate
+		续期客户端证书
 
-		Usage: $SCRIPT_NAME client renew <name> [options]
+		用法: $SCRIPT_NAME client renew <名称> [选项]
 
-		Options:
-			--cert-days <n>   New certificate validity in days (default: 3650)
+		选项:
+			--cert-days <天数>  新证书有效期（默认: 3650）
 
-		Examples:
+		示例:
 			$SCRIPT_NAME client renew alice
 			$SCRIPT_NAME client renew bob --cert-days 365
 	EOF
@@ -356,30 +359,30 @@ show_client_renew_help() {
 
 show_server_help() {
 	cat <<-EOF
-		Server management
+		服务端管理
 
-		Usage: $SCRIPT_NAME server <subcommand> [options]
+		用法: $SCRIPT_NAME server <子命令> [选项]
 
-		Subcommands:
-			status   List currently connected clients
-			renew    Renew server certificate
+		子命令:
+			status   列出当前已连接的客户端
+			renew    续期服务端证书
 
-		Run '$SCRIPT_NAME server <subcommand> --help' for more info.
+		使用 '$SCRIPT_NAME server <子命令> --help' 查看详细帮助。
 	EOF
 }
 
 show_server_status_help() {
 	cat <<-EOF
-		List currently connected clients
+		列出当前已连接的客户端
 
-		Note: Client data is updated every 60 seconds by OpenVPN.
+		说明: OpenVPN 约每 60 秒更新一次客户端数据。
 
-		Usage: $SCRIPT_NAME server status [options]
+		用法: $SCRIPT_NAME server status [选项]
 
-		Options:
-			--format <fmt>  Output format: table or json (default: table)
+		选项:
+			--format <格式>  输出格式: table 或 json（默认: table）
 
-		Examples:
+		示例:
 			$SCRIPT_NAME server status
 			$SCRIPT_NAME server status --format json
 	EOF
@@ -387,15 +390,15 @@ show_server_status_help() {
 
 show_server_renew_help() {
 	cat <<-EOF
-		Renew server certificate
+		续期服务端证书
 
-		Usage: $SCRIPT_NAME server renew [options]
+		用法: $SCRIPT_NAME server renew [选项]
 
-		Options:
-			--cert-days <n>   New certificate validity in days (default: 3650)
-			-f, --force       Skip confirmation/warning
+		选项:
+			--cert-days <天数>  新证书有效期（默认: 3650）
+			-f, --force         跳过确认/警告
 
-		Examples:
+		示例:
 			$SCRIPT_NAME server renew
 			$SCRIPT_NAME server renew --cert-days 1825
 	EOF
@@ -405,23 +408,33 @@ show_server_renew_help() {
 # CLI Command Handlers
 # =============================================================================
 
-# Check if OpenVPN is installed
+# Check if OpenVPN server is installed by THIS script (uses /etc/openvpn/ layout)
 isOpenVPNInstalled() {
-	[[ -e /etc/openvpn/server/server.conf ]]
+	[[ -e /etc/openvpn/server.conf ]]
+}
+
+# Check if any OpenVPN server config exists（经典布局 /etc/openvpn/server.conf）
+hasAnyOpenVPNServerConfig() {
+	[[ -e /etc/openvpn/server.conf ]]
 }
 
 # Require OpenVPN to be installed
 requireOpenVPN() {
 	if ! isOpenVPNInstalled; then
-		log_fatal "OpenVPN is not installed. Run '$SCRIPT_NAME install' first."
+		log_fatal "OpenVPN 未安装。请先执行 '$SCRIPT_NAME install' 进行安装。"
 	fi
 }
 
-# Require OpenVPN to NOT be installed
+# Require OpenVPN to NOT be installed (no conflict with any existing server)
 requireNoOpenVPN() {
-	if isOpenVPNInstalled; then
-		log_fatal "OpenVPN is already installed. Use '$SCRIPT_NAME client' to manage clients or '$SCRIPT_NAME uninstall' to remove."
+	if [[ -e /etc/openvpn/server.conf ]]; then
+		log_fatal "检测到已有 OpenVPN 服务器配置：/etc/openvpn/server.conf。请使用 '$SCRIPT_NAME client' 管理客户端，或 '$SCRIPT_NAME uninstall' 卸载。"
 	fi
+}
+
+# 本脚本统一使用 openvpn-server@server 作为服务名（经典布局 /etc/openvpn/server.conf）
+getOpenVPNServiceUnit() {
+	echo "openvpn-server@server"
 }
 
 # Parse DNS provider string to DNS number
@@ -430,7 +443,7 @@ parse_dns_provider() {
 	system | unbound | cloudflare | quad9 | quad9-uncensored | fdn | dnswatch | opendns | google | yandex | adguard | nextdns | custom)
 		DNS="$1"
 		;;
-	*) log_fatal "Invalid DNS provider: $1. See '$SCRIPT_NAME install --help' for valid providers." ;;
+	*) log_fatal "无效的 DNS 提供商: $1。请使用 '$SCRIPT_NAME install --help' 查看可选值。" ;;
 	esac
 }
 
@@ -440,7 +453,7 @@ parse_cipher() {
 	AES-128-GCM | AES-192-GCM | AES-256-GCM | AES-128-CBC | AES-192-CBC | AES-256-CBC | CHACHA20-POLY1305)
 		CIPHER="$1"
 		;;
-	*) log_fatal "Invalid cipher: $1. See '$SCRIPT_NAME install --help' for valid ciphers." ;;
+	*) log_fatal "无效的加密算法: $1。请使用 '$SCRIPT_NAME install --help' 查看可选值。" ;;
 	esac
 }
 
@@ -499,14 +512,21 @@ set_installation_defaults() {
 	# Network
 	ENDPOINT_TYPE="${ENDPOINT_TYPE:-4}"
 	CLIENT_IPV4="${CLIENT_IPV4:-y}"
-	CLIENT_IPV6="${CLIENT_IPV6:-n}"
+	# 若有 IPv6 连通性则默认开启客户端 IPv6（双栈）
+	_has_ipv6="n"
+	if type ping6 >/dev/null 2>&1; then
+		ping6 -c1 -W2 ipv6.google.com >/dev/null 2>&1 && _has_ipv6="y"
+	elif type ping >/dev/null 2>&1; then
+		ping -6 -c1 -W2 ipv6.google.com >/dev/null 2>&1 && _has_ipv6="y"
+	fi
+	CLIENT_IPV6="${CLIENT_IPV6:-$_has_ipv6}"
 	VPN_SUBNET_IPV4="${VPN_SUBNET_IPV4:-10.8.0.0}"
 	VPN_SUBNET_IPV6="${VPN_SUBNET_IPV6:-fd42:42:42:42::}"
-	PORT="${PORT:-1194}"
-	PROTOCOL="${PROTOCOL:-udp}"
+	PORT="${PORT:-random}"
+	PROTOCOL="${PROTOCOL:-tcp}"
 
 	# DNS (use string name)
-	DNS="${DNS:-cloudflare}"
+	DNS="${DNS:-adguard}"
 
 	# Multi-client
 	MULTI_CLIENT="${MULTI_CLIENT:-n}"
@@ -518,9 +538,9 @@ set_installation_defaults() {
 	RSA_KEY_SIZE="${RSA_KEY_SIZE:-2048}"
 	TLS_VERSION_MIN="${TLS_VERSION_MIN:-1.2}"
 	TLS13_CIPHERSUITES="${TLS13_CIPHERSUITES:-TLS_AES_256_GCM_SHA384:TLS_AES_128_GCM_SHA256:TLS_CHACHA20_POLY1305_SHA256}"
-	TLS_GROUPS="${TLS_GROUPS:-X25519:prime256v1:secp384r1:secp521r1}"
+	TLS_GROUPS="${TLS_GROUPS:-prime256v1}"
 	HMAC_ALG="${HMAC_ALG:-SHA256}"
-	TLS_SIG="${TLS_SIG:-crypt-v2}"
+	TLS_SIG="${TLS_SIG:-crypt}"
 	AUTH_MODE="${AUTH_MODE:-pki}"
 
 	# Derive CC_CIPHER from CERT_TYPE if not set
@@ -534,9 +554,23 @@ set_installation_defaults() {
 
 	# Client
 	CLIENT="${CLIENT:-client}"
-	PASS="${PASS:-1}"
+	PASS="${PASS:-2}"
 	CLIENT_CERT_DURATION_DAYS="${CLIENT_CERT_DURATION_DAYS:-$DEFAULT_CERT_VALIDITY_DURATION_DAYS}"
 	SERVER_CERT_DURATION_DAYS="${SERVER_CERT_DURATION_DAYS:-$DEFAULT_CERT_VALIDITY_DURATION_DAYS}"
+
+	# 性能优化默认高吞吐
+	PERF_OPT="${PERF_OPT:-2}"
+
+	# Auto-detect local LAN subnet as default for PUSH_ROUTES (走 VPN 的网段) when not set
+	if [[ -z $PUSH_ROUTES ]]; then
+		_dnic=$(ip -4 route ls 2>/dev/null | grep default | grep -Po '(?<=dev )(\S+)' | head -1)
+		if [[ -n $_dnic ]]; then
+			_dsub=$(ip -4 route show dev "$_dnic" 2>/dev/null | awk '/scope link/ {print $1}' | head -1)
+			if [[ -n $_dsub ]] && echo "$_dsub" | grep -qE '^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)'; then
+				PUSH_ROUTES="$_dsub"
+			fi
+		fi
+	fi
 
 	# Note: Gateway values (VPN_GATEWAY_IPV4, VPN_GATEWAY_IPV6) and IPV6_SUPPORT
 	# are computed in prepare_network_config() which is called after validation
@@ -552,6 +586,39 @@ version_ge() {
 # Get installed OpenVPN version (e.g., "2.6.12")
 get_openvpn_version() {
 	openvpn --version 2>/dev/null | head -1 | awk '{print $2}'
+}
+
+# GitHub mirror base URLs (prepended to original URL when primary download fails)
+# Format: mirror_base + original_url = mirror_url, e.g. https://ghproxy.com/ + https://github.com/...
+readonly GITHUB_MIRRORS=(
+	"https://ghproxy.com/"
+	"https://mirror.ghproxy.com/"
+	"https://ghps.cc/"
+)
+
+# Download URL to file with mirror fallback. On failure after trying primary and all mirrors, calls log_fatal.
+# Usage: download_with_mirror_fallback "url" "output_file" "description"
+download_with_mirror_fallback() {
+	local url="$1"
+	local output_file="$2"
+	local description="${3:-下载}"
+	local try_mirror
+
+	log_info "正在下载 ${description}..."
+	if curl -fL --retry 5 --retry-delay 2 -o "$output_file" "$url" 2>/dev/null; then
+		return 0
+	fi
+	log_warn "从 GitHub 直接下载失败，正在尝试使用镜像站..."
+	for try_mirror in "${GITHUB_MIRRORS[@]}"; do
+		local mirror_url="${try_mirror}${url}"
+		log_info "尝试镜像: ${try_mirror%%/}"
+		if curl -fL --retry 3 --retry-delay 2 -o "$output_file" "$mirror_url" 2>/dev/null; then
+			log_success "镜像站下载成功。"
+			return 0
+		fi
+	done
+	rm -f "$output_file"
+	log_fatal "${description} 失败：GitHub 与所有镜像站均无法下载。请检查网络或稍后重试。"
 }
 
 # Validation functions
@@ -594,6 +661,37 @@ validate_subnet_ipv6() {
 	if ! [[ "$subnet" =~ ^fd[0-9a-fA-F]{2}(:[0-9a-fA-F]{1,4}){2,5}::$ ]]; then
 		log_fatal "Invalid IPv6 subnet: $subnet. Must be a ULA address with at least a /48 prefix, ending with :: (e.g., fd42:42:42::)"
 	fi
+}
+
+# Convert CIDR prefix (1-32) to dotted decimal netmask for OpenVPN push "route"
+cidr_to_netmask() {
+	local cidr="$1"
+	if ! [[ "$cidr" =~ ^[0-9]+$ ]] || [[ "$cidr" -lt 1 ]] || [[ "$cidr" -gt 32 ]]; then
+		echo "" && return 1
+	fi
+	local mask=$((0xffffffff << (32 - cidr) & 0xffffffff))
+	printf "%d.%d.%d.%d" $((mask >> 24)) $(((mask >> 16) & 255)) $(((mask >> 8) & 255)) $((mask & 255))
+}
+
+# Parse one IPv4 CIDR (e.g. 192.168.1.0/24) to "network netmask" for OpenVPN push "route"
+parse_push_route_ipv4() {
+	local cidr_str="$1"
+	local ip cidr
+	if [[ "$cidr_str" =~ ^([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)/([0-9]+)$ ]]; then
+		ip="${BASH_REMATCH[1]}"
+		cidr="${BASH_REMATCH[2]}"
+	else
+		echo "" && return 1
+	fi
+	[[ "$cidr" -lt 1 ]] || [[ "$cidr" -gt 32 ]] && echo "" && return 1
+	local mask_dotted
+	mask_dotted=$(cidr_to_netmask "$cidr") || { echo "" && return 1; }
+	local o1 o2 o3 o4
+	IFS='.' read -r o1 o2 o3 o4 <<< "$ip"
+	[[ "$o1" -ge 0 ]] && [[ "$o1" -le 255 ]] && [[ "$o2" -ge 0 ]] && [[ "$o2" -le 255 ]] && [[ "$o3" -ge 0 ]] && [[ "$o3" -le 255 ]] && [[ "$o4" -ge 0 ]] && [[ "$o4" -le 255 ]] || { echo "" && return 1; }
+	local m1 m2 m3 m4
+	IFS='.' read -r m1 m2 m3 m4 <<< "$mask_dotted"
+	printf "%d.%d.%d.%d %s" $((o1 & m1)) $((o2 & m2)) $((o3 & m3)) $((o4 & m4)) "$mask_dotted"
 }
 
 validate_positive_int() {
@@ -1111,7 +1209,7 @@ cmd_install() {
 			exit 0
 			;;
 		*)
-			log_fatal "Unknown option: $1. See '$SCRIPT_NAME install --help' for usage."
+			log_fatal "未知选项: $1。请使用 '$SCRIPT_NAME install --help' 查看用法。"
 			;;
 		esac
 	done
@@ -1125,6 +1223,8 @@ cmd_install() {
 	requireNoOpenVPN
 
 	if [[ $interactive == true ]]; then
+		# Set defaults so e.g. PASS=2 (generate password for first client)
+		set_installation_defaults
 		# Run interactive installer
 		installQuestions
 	else
@@ -1134,10 +1234,12 @@ cmd_install() {
 		APPROVE_IP=${APPROVE_IP:-y}
 		CONTINUE=y
 
+		# 默认使用随机端口（未指定 --port 时）
+		PORT="${PORT:-random}"
 		# Handle random port
 		if [[ $PORT == "random" ]]; then
 			PORT=$(shuf -i 49152-65535 -n1)
-			log_info "Random Port: $PORT"
+			log_info "随机端口: $PORT"
 		fi
 
 		# Client setup
@@ -1184,7 +1286,7 @@ cmd_uninstall() {
 			exit 0
 			;;
 		*)
-			log_fatal "Unknown option: $1. See '$SCRIPT_NAME uninstall --help' for usage."
+			log_fatal "未知选项: $1。请使用 '$SCRIPT_NAME uninstall --help' 查看用法。"
 			;;
 		esac
 	done
@@ -1221,7 +1323,7 @@ cmd_client() {
 		cmd_client_renew "$@"
 		;;
 	*)
-		log_fatal "Unknown client subcommand: $subcmd. See '$SCRIPT_NAME client --help' for usage."
+		log_fatal "未知的 client 子命令: $subcmd。请使用 '$SCRIPT_NAME client --help' 查看用法。"
 		;;
 	esac
 }
@@ -1260,7 +1362,7 @@ cmd_client_add() {
 			exit 0
 			;;
 		-*)
-			log_fatal "Unknown option: $1. See '$SCRIPT_NAME client add --help' for usage."
+			log_fatal "未知选项: $1。请使用 '$SCRIPT_NAME client add --help' 查看用法。"
 			;;
 		*)
 			if [[ -z "$client_name" ]]; then
@@ -1273,7 +1375,7 @@ cmd_client_add() {
 		esac
 	done
 
-	[[ -z "$client_name" ]] && log_fatal "Client name is required. See '$SCRIPT_NAME client add --help' for usage."
+	[[ -z "$client_name" ]] && log_fatal "请指定客户端名称。使用 '$SCRIPT_NAME client add --help' 查看用法。"
 	validate_client_name "$client_name"
 
 	requireOpenVPN
@@ -1314,7 +1416,7 @@ cmd_client_list() {
 			exit 0
 			;;
 		*)
-			log_fatal "Unknown option: $1. See '$SCRIPT_NAME client list --help' for usage."
+			log_fatal "未知选项: $1。请使用 '$SCRIPT_NAME client list --help' 查看用法。"
 			;;
 		esac
 	done
@@ -1340,7 +1442,7 @@ cmd_client_revoke() {
 			exit 0
 			;;
 		-*)
-			log_fatal "Unknown option: $1. See '$SCRIPT_NAME client revoke --help' for usage."
+			log_fatal "未知选项: $1。请使用 '$SCRIPT_NAME client revoke --help' 查看用法。"
 			;;
 		*)
 			if [[ -z "$client_name" ]]; then
@@ -1353,7 +1455,7 @@ cmd_client_revoke() {
 		esac
 	done
 
-	[[ -z "$client_name" ]] && log_fatal "Client name is required. See '$SCRIPT_NAME client revoke --help' for usage."
+	[[ -z "$client_name" ]] && log_fatal "请指定客户端名称。使用 '$SCRIPT_NAME client revoke --help' 查看用法。"
 
 	requireOpenVPN
 
@@ -1382,7 +1484,7 @@ cmd_client_renew() {
 			exit 0
 			;;
 		-*)
-			log_fatal "Unknown option: $1. See '$SCRIPT_NAME client renew --help' for usage."
+			log_fatal "未知选项: $1。请使用 '$SCRIPT_NAME client renew --help' 查看用法。"
 			;;
 		*)
 			if [[ -z "$client_name" ]]; then
@@ -1395,7 +1497,7 @@ cmd_client_renew() {
 		esac
 	done
 
-	[[ -z "$client_name" ]] && log_fatal "Client name is required. See '$SCRIPT_NAME client renew --help' for usage."
+	[[ -z "$client_name" ]] && log_fatal "请指定客户端名称。使用 '$SCRIPT_NAME client renew --help' 查看用法。"
 
 	requireOpenVPN
 
@@ -1422,7 +1524,7 @@ cmd_server() {
 		cmd_server_renew "$@"
 		;;
 	*)
-		log_fatal "Unknown server subcommand: $subcmd. See '$SCRIPT_NAME server --help' for usage."
+		log_fatal "未知的 server 子命令: $subcmd。请使用 '$SCRIPT_NAME server --help' 查看用法。"
 		;;
 	esac
 }
@@ -1446,7 +1548,7 @@ cmd_server_status() {
 			exit 0
 			;;
 		*)
-			log_fatal "Unknown option: $1. See '$SCRIPT_NAME server status --help' for usage."
+			log_fatal "未知选项: $1。请使用 '$SCRIPT_NAME server status --help' 查看用法。"
 			;;
 		esac
 	done
@@ -1477,7 +1579,7 @@ cmd_server_renew() {
 			exit 0
 			;;
 		*)
-			log_fatal "Unknown option: $1. See '$SCRIPT_NAME server renew --help' for usage."
+			log_fatal "未知选项: $1。请使用 '$SCRIPT_NAME server renew --help' 查看用法。"
 			;;
 		esac
 	done
@@ -1497,9 +1599,9 @@ cmd_interactive() {
 	while [[ $# -gt 0 ]]; do
 		case "$1" in
 		-h | --help)
-			echo "Launch interactive menu for OpenVPN management"
+			echo "启动 OpenVPN 交互式管理菜单"
 			echo ""
-			echo "Usage: $SCRIPT_NAME interactive"
+			echo "用法: $SCRIPT_NAME interactive"
 			exit 0
 			;;
 		*)
@@ -1516,8 +1618,29 @@ cmd_interactive() {
 	fi
 }
 
+# Ensure UTF-8 locale for correct display of Chinese and other characters
+ensure_utf8_locale() {
+	local loc
+	# If any of LANG, LC_ALL, LC_CTYPE already indicates UTF-8, leave as is
+	if [[ "${LANG:-}" == *[Uu][Tt][Ff]*8* ]] || [[ "${LC_ALL:-}" == *[Uu][Tt][Ff]*8* ]] || [[ "${LC_CTYPE:-}" == *[Uu][Tt][Ff]*8* ]]; then
+		return 0
+	fi
+	# Try common UTF-8 locales in order of preference
+	for loc in C.UTF-8 en_US.UTF-8 zh_CN.UTF-8; do
+		if locale -a 2>/dev/null | grep -qxi "${loc}"; then
+			export LANG="$loc"
+			export LC_ALL="$loc"
+			return 0
+		fi
+	done
+	# Fallback: set C.UTF-8 anyway (may not be available on all systems)
+	export LANG=C.UTF-8
+	export LC_ALL=C.UTF-8
+}
+
 # Main argument parser
 parse_args() {
+	ensure_utf8_locale
 	# Parse global options first
 	while [[ $# -gt 0 ]]; do
 		case "$1" in
@@ -1579,11 +1702,11 @@ parse_args() {
 		prev_arg="$arg"
 	done
 
-	# Dispatch to command handler
+	# Dispatch to command handler (no command = default to interactive: install if not installed, else manage menu)
 	case "$cmd" in
 	"")
-		show_help
-		exit 0
+		[[ $wants_help == false ]] && initialCheck
+		cmd_interactive "$@"
 		;;
 	install)
 		[[ $wants_help == false ]] && initialCheck
@@ -1601,12 +1724,17 @@ parse_args() {
 		[[ $wants_help == false ]] && initialCheck
 		cmd_server "$@"
 		;;
+	fix)
+		[[ $wants_help == false ]] && initialCheck
+		requireOpenVPN
+		fixOpenVPNSystemdService
+		;;
 	interactive)
 		[[ $wants_help == false ]] && initialCheck
 		cmd_interactive "$@"
 		;;
 	*)
-		log_fatal "Unknown command: $cmd. See '$SCRIPT_NAME --help' for usage."
+		log_fatal "未知命令: $cmd。请使用 '$SCRIPT_NAME --help' 查看用法。"
 		;;
 	esac
 }
@@ -1850,10 +1978,10 @@ function installOpenVPNRepo() {
 		fi
 		echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/openvpn-repo-public.asc] https://build.openvpn.net/debian/openvpn/stable ${VERSION_CODENAME} main" >/etc/apt/sources.list.d/openvpn-aptrepo.list
 
-		log_info "Updating package lists with new repository..."
+		log_info "正在使用新源更新软件包列表..."
 		run_cmd_fatal "Update package lists" apt-get update
 
-		log_info "OpenVPN official repository configured"
+		log_info "OpenVPN 官方源已配置"
 
 	elif [[ $OS =~ (centos|oracle) ]]; then
 		# For RHEL-based systems, use Fedora Copr (OpenVPN 2.6 stable)
@@ -2075,17 +2203,17 @@ function prepare_network_config() {
 }
 
 function installQuestions() {
-	log_header "OpenVPN Installer"
-	log_prompt "The git repository is available at: https://github.com/angristan/openvpn-install"
+	log_header "OpenVPN 安装向导"
+	log_prompt "项目地址: https://github.com/angristan/openvpn-install"
 
-	log_prompt "I need to ask you a few questions before starting the setup."
-	log_prompt "You can leave the default options and just press enter if you are okay with them."
+	log_prompt "安装前需要确认以下选项。"
+	log_prompt "可直接回车使用默认值。"
 
 	# ==========================================================================
 	# Step 1: Detect server IP addresses
 	# ==========================================================================
 	log_menu ""
-	log_prompt "Detecting server IP addresses..."
+	log_prompt "正在检测本机 IP 地址..."
 
 	# Detect IPv4 address
 	IP_IPV4=$(ip -4 addr | sed -ne 's|^.* inet \([^/]*\)/.* scope global.*$|\1|p' | head -1)
@@ -2093,21 +2221,21 @@ function installQuestions() {
 	IP_IPV6=$(ip -6 addr | sed -ne 's|^.* inet6 \([^/]*\)/.* scope global.*$|\1|p' | head -1)
 
 	if [[ -n $IP_IPV4 ]]; then
-		log_prompt "  IPv4 address detected: $IP_IPV4"
+		log_prompt "  检测到 IPv4: $IP_IPV4"
 	else
-		log_prompt "  No IPv4 address detected"
+		log_prompt "  未检测到 IPv4"
 	fi
 	if [[ -n $IP_IPV6 ]]; then
-		log_prompt "  IPv6 address detected: $IP_IPV6"
+		log_prompt "  检测到 IPv6: $IP_IPV6"
 	else
-		log_prompt "  No IPv6 address detected"
+		log_prompt "  未检测到 IPv6"
 	fi
 
 	# ==========================================================================
 	# Step 2: Endpoint type selection
 	# ==========================================================================
 	log_menu ""
-	log_prompt "What IP version should clients use to connect to this server?"
+	log_prompt "客户端使用哪种 IP 版本连接本服务器？"
 
 	# Determine default based on available addresses
 	if [[ -n $IP_IPV4 ]]; then
@@ -2115,13 +2243,13 @@ function installQuestions() {
 	elif [[ -n $IP_IPV6 ]]; then
 		ENDPOINT_TYPE_DEFAULT=2
 	else
-		log_fatal "No IPv4 or IPv6 address detected on this server."
+		log_fatal "本机未检测到 IPv4 或 IPv6 地址。"
 	fi
 
 	log_menu "   1) IPv4"
 	log_menu "   2) IPv6"
 	until [[ $ENDPOINT_TYPE_CHOICE =~ ^[1-2]$ ]]; do
-		read -rp "Endpoint type [1-2]: " -e -i $ENDPOINT_TYPE_DEFAULT ENDPOINT_TYPE_CHOICE
+		read -rp "连接类型 [1-2]: " -e -i $ENDPOINT_TYPE_DEFAULT ENDPOINT_TYPE_CHOICE
 	done
 	case $ENDPOINT_TYPE_CHOICE in
 	1)
@@ -2141,40 +2269,40 @@ function installQuestions() {
 	if [[ $APPROVE_IP =~ n ]]; then
 		log_menu ""
 		if [[ $ENDPOINT_TYPE == "4" ]]; then
-			log_prompt "Server listening IPv4 address:"
-			read -rp "IPv4 address: " -e -i "$IP" IP
+			log_prompt "服务器监听的 IPv4 地址："
+			read -rp "IPv4 地址: " -e -i "$IP" IP
 		else
-			log_prompt "Server listening IPv6 address:"
-			read -rp "IPv6 address: " -e -i "$IP" IP
+			log_prompt "服务器监听的 IPv6 地址："
+			read -rp "IPv6 地址: " -e -i "$IP" IP
 		fi
 	fi
 
 	# If IPv4 and private IP, server is behind NAT
 	if [[ $ENDPOINT_TYPE == "4" ]] && echo "$IP" | grep -qE '^(10\.|172\.1[6789]\.|172\.2[0-9]\.|172\.3[01]\.|192\.168)'; then
 		log_menu ""
-		log_prompt "It seems this server is behind NAT. What is its public IPv4 address or hostname?"
-		log_prompt "We need it for the clients to connect to the server."
+		log_prompt "本机似乎处于 NAT 后。请填写公网 IPv4 地址或主机名。"
+		log_prompt "客户端将使用该地址连接服务器。"
 
 		if [[ -z $ENDPOINT ]]; then
 			DEFAULT_ENDPOINT=$(resolvePublicIPv4)
 		fi
 
 		until [[ $ENDPOINT != "" ]]; do
-			read -rp "Public IPv4 address or hostname: " -e -i "$DEFAULT_ENDPOINT" ENDPOINT
+			read -rp "公网 IPv4 地址或主机名: " -e -i "$DEFAULT_ENDPOINT" ENDPOINT
 		done
 	elif [[ $ENDPOINT_TYPE == "6" ]]; then
 		# For IPv6, check if it's a link-local address (starts with fe80)
 		if echo "$IP" | grep -qiE '^fe80'; then
 			log_menu ""
-			log_prompt "The detected IPv6 address is link-local. What is the public IPv6 address or hostname?"
-			log_prompt "We need it for the clients to connect to the server."
+			log_prompt "检测到的 IPv6 为链路本地地址。请填写公网 IPv6 地址或主机名。"
+			log_prompt "客户端将使用该地址连接服务器。"
 
 			if [[ -z $ENDPOINT ]]; then
 				DEFAULT_ENDPOINT=$(resolvePublicIPv6)
 			fi
 
 			until [[ $ENDPOINT != "" ]]; do
-				read -rp "Public IPv6 address or hostname: " -e -i "$DEFAULT_ENDPOINT" ENDPOINT
+				read -rp "公网 IPv6 地址或主机名: " -e -i "$DEFAULT_ENDPOINT" ENDPOINT
 			done
 		fi
 	fi
@@ -2183,8 +2311,8 @@ function installQuestions() {
 	# Step 4: Client IP versions
 	# ==========================================================================
 	log_menu ""
-	log_prompt "What IP versions should VPN clients use?"
-	log_prompt "This determines both their VPN addresses and internet access through the tunnel."
+	log_prompt "VPN 客户端使用哪种 IP 版本？"
+	log_prompt "将决定客户端的 VPN 地址及通过隧道的上网方式。"
 
 	# Check IPv6 connectivity for suggestion
 	if type ping6 >/dev/null 2>&1; then
@@ -2204,11 +2332,11 @@ function installQuestions() {
 		CLIENT_IP_DEFAULT=1 # IPv4 only otherwise
 	fi
 
-	log_menu "   1) IPv4 only"
-	log_menu "   2) IPv6 only"
-	log_menu "   3) Dual-stack (IPv4 + IPv6)"
+	log_menu "   1) 仅 IPv4"
+	log_menu "   2) 仅 IPv6"
+	log_menu "   3) 双栈 (IPv4 + IPv6)"
 	until [[ $CLIENT_IP_CHOICE =~ ^[1-3]$ ]]; do
-		read -rp "Client IP versions [1-3]: " -e -i $CLIENT_IP_DEFAULT CLIENT_IP_CHOICE
+		read -rp "客户端 IP 版本 [1-3]: " -e -i $CLIENT_IP_DEFAULT CLIENT_IP_CHOICE
 	done
 	case $CLIENT_IP_CHOICE in
 	1)
@@ -2230,11 +2358,11 @@ function installQuestions() {
 	# ==========================================================================
 	if [[ $CLIENT_IPV4 == "y" ]]; then
 		log_menu ""
-		log_prompt "IPv4 VPN subnet:"
-		log_menu "   1) Default: 10.8.0.0/24"
-		log_menu "   2) Custom"
+		log_prompt "IPv4 VPN 网段："
+		log_menu "   1) 默认: 10.8.0.0/24"
+		log_menu "   2) 自定义"
 		until [[ $SUBNET_IPV4_CHOICE =~ ^[1-2]$ ]]; do
-			read -rp "IPv4 subnet choice [1-2]: " -e -i 1 SUBNET_IPV4_CHOICE
+			read -rp "IPv4 网段 [1-2]: " -e -i 1 SUBNET_IPV4_CHOICE
 		done
 		case $SUBNET_IPV4_CHOICE in
 		1)
@@ -2244,13 +2372,13 @@ function installQuestions() {
 			# Skip prompt if VPN_SUBNET_IPV4 is already set (e.g., via environment variable)
 			if [[ -z $VPN_SUBNET_IPV4 ]]; then
 				until [[ $VPN_SUBNET_IPV4 =~ ^(10\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])|172\.(1[6-9]|2[0-9]|3[0-1])\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])|192\.168\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9]))\.0$ ]]; do
-					read -rp "Custom IPv4 subnet (e.g., 10.9.0.0): " VPN_SUBNET_IPV4
+					read -rp "自定义 IPv4 网段（如 10.9.0.0）: " VPN_SUBNET_IPV4
 				done
 			fi
 			;;
 		esac
 	else
-		# IPv6-only mode: still need IPv4 subnet for leak prevention (redirect-gateway def1)
+		# IPv6-only mode: still assign IPv4 subnet to clients for compatibility
 		VPN_SUBNET_IPV4="10.8.0.0"
 	fi
 
@@ -2259,11 +2387,11 @@ function installQuestions() {
 	# ==========================================================================
 	if [[ $CLIENT_IPV6 == "y" ]]; then
 		log_menu ""
-		log_prompt "IPv6 VPN subnet:"
-		log_menu "   1) Default: fd42:42:42:42::/112"
-		log_menu "   2) Custom"
+		log_prompt "IPv6 VPN 网段："
+		log_menu "   1) 默认: fd42:42:42:42::/112"
+		log_menu "   2) 自定义"
 		until [[ $SUBNET_IPV6_CHOICE =~ ^[1-2]$ ]]; do
-			read -rp "IPv6 subnet choice [1-2]: " -e -i 1 SUBNET_IPV6_CHOICE
+			read -rp "IPv6 网段 [1-2]: " -e -i 1 SUBNET_IPV6_CHOICE
 		done
 		case $SUBNET_IPV6_CHOICE in
 		1)
@@ -2273,7 +2401,7 @@ function installQuestions() {
 			# Skip prompt if VPN_SUBNET_IPV6 is already set (e.g., via environment variable)
 			if [[ -z $VPN_SUBNET_IPV6 ]]; then
 				until [[ $VPN_SUBNET_IPV6 =~ ^fd[0-9a-fA-F]{0,2}(:[0-9a-fA-F]{0,4}){0,6}::$ ]]; do
-					read -rp "Custom IPv6 subnet (e.g., fd12:3456:789a::): " VPN_SUBNET_IPV6
+					read -rp "自定义 IPv6 网段（如 fd12:3456:789a::）: " VPN_SUBNET_IPV6
 				done
 			fi
 			;;
@@ -2281,35 +2409,34 @@ function installQuestions() {
 	fi
 
 	log_menu ""
-	log_prompt "What port do you want OpenVPN to listen to?"
-	log_menu "   1) Default: 1194"
-	log_menu "   2) Custom"
-	log_menu "   3) Random [49152-65535]"
+	log_prompt "OpenVPN 监听端口？"
+	log_menu "   1) 随机 [49152-65535]（推荐）"
+	log_menu "   2) 自定义"
+	log_menu "   3) 默认 1194"
 	until [[ $PORT_CHOICE =~ ^[1-3]$ ]]; do
-		read -rp "Port choice [1-3]: " -e -i 1 PORT_CHOICE
+		read -rp "端口 [1-3]: " -e -i 1 PORT_CHOICE
 	done
 	case $PORT_CHOICE in
 	1)
-		PORT="1194"
+		PORT=$(shuf -i 49152-65535 -n1)
+		log_info "随机端口: $PORT"
 		;;
 	2)
 		until [[ $PORT =~ ^[0-9]+$ ]] && [ "$PORT" -ge 1 ] && [ "$PORT" -le 65535 ]; do
-			read -rp "Custom port [1-65535]: " -e -i 1194 PORT
+			read -rp "自定义端口 [1-65535]: " -e -i "$(shuf -i 49152-65535 -n1)" PORT
 		done
 		;;
 	3)
-		# Generate random number within private ports range
-		PORT=$(shuf -i 49152-65535 -n1)
-		log_info "Random Port: $PORT"
+		PORT="1194"
 		;;
 	esac
 	log_menu ""
-	log_prompt "What protocol do you want OpenVPN to use?"
-	log_prompt "UDP is faster. Unless it is not available, you shouldn't use TCP."
+	log_prompt "OpenVPN 使用哪种协议？"
+	log_prompt "UDP 更快；TCP 兼容性更好（如过墙、公司网络）。"
 	log_menu "   1) UDP"
-	log_menu "   2) TCP"
+	log_menu "   2) TCP（推荐）"
 	until [[ $PROTOCOL_CHOICE =~ ^[1-2]$ ]]; do
-		read -rp "Protocol [1-2]: " -e -i 1 PROTOCOL_CHOICE
+		read -rp "协议 [1-2]: " -e -i 2 PROTOCOL_CHOICE
 	done
 	case $PROTOCOL_CHOICE in
 	1)
@@ -2320,22 +2447,22 @@ function installQuestions() {
 		;;
 	esac
 	log_menu ""
-	log_prompt "What DNS resolvers do you want to use with the VPN?"
-	local dns_labels=("Current system resolvers (from /etc/resolv.conf)" "Self-hosted DNS Resolver (Unbound)" "Cloudflare (Anycast: worldwide)" "Quad9 (Anycast: worldwide)" "Quad9 uncensored (Anycast: worldwide)" "FDN (France)" "DNS.WATCH (Germany)" "OpenDNS (Anycast: worldwide)" "Google (Anycast: worldwide)" "Yandex Basic (Russia)" "AdGuard DNS (Anycast: worldwide)" "NextDNS (Anycast: worldwide)" "Custom")
+	log_prompt "VPN 使用哪种 DNS 解析？"
+	local dns_labels=("当前系统 DNS（/etc/resolv.conf）" "自建 DNS (Unbound)" "Cloudflare（全球）" "Quad9（全球）" "Quad9 无审查（全球）" "FDN（法国）" "DNS.WATCH（德国）" "OpenDNS（全球）" "Google（全球）" "Yandex Basic（俄罗斯）" "AdGuard DNS（全球）" "NextDNS（全球）" "自定义")
 	local dns_valid=false
 	until [[ $dns_valid == true ]]; do
-		select_with_labels "DNS" dns_labels DNS_PROVIDERS "cloudflare" DNS
+		select_with_labels "DNS" dns_labels DNS_PROVIDERS "adguard" DNS
 		if [[ $DNS == "unbound" ]] && [[ -e /etc/unbound/unbound.conf ]]; then
 			log_menu ""
-			log_prompt "Unbound is already installed."
-			log_prompt "You can allow the script to configure it in order to use it from your OpenVPN clients"
-			log_prompt "We will simply add a second server to /etc/unbound/unbound.conf for the OpenVPN subnet."
-			log_prompt "No changes are made to the current configuration."
+			log_prompt "Unbound 已安装。"
+			log_prompt "可让本脚本配置 Unbound，供 OpenVPN 客户端使用。"
+			log_prompt "将在 /etc/unbound/unbound.conf 中为 OpenVPN 网段添加一个服务器块。"
+			log_prompt "不会修改现有配置。"
 			log_menu ""
 
 			local unbound_continue
 			until [[ $unbound_continue =~ ^[yn]$ ]]; do
-				read -rp "Apply configuration changes to Unbound? [y/n]: " -e unbound_continue
+				read -rp "是否对 Unbound 应用上述配置？[y/n]: " -e unbound_continue
 			done
 			if [[ $unbound_continue == "n" ]]; then
 				unset DNS
@@ -2344,10 +2471,10 @@ function installQuestions() {
 			fi
 		elif [[ $DNS == "custom" ]]; then
 			until [[ $DNS1 =~ ^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]]; do
-				read -rp "Primary DNS: " -e DNS1
+				read -rp "主 DNS: " -e DNS1
 			done
 			until [[ $DNS2 =~ ^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]]; do
-				read -rp "Secondary DNS (optional): " -e DNS2
+				read -rp "备用 DNS（可选）: " -e DNS2
 				if [[ $DNS2 == "" ]]; then
 					break
 				fi
@@ -2358,19 +2485,18 @@ function installQuestions() {
 		fi
 	done
 	log_menu ""
-	log_prompt "Do you want to allow a single .ovpn profile to be used on multiple devices simultaneously?"
-	log_prompt "Note: Enabling this disables persistent IP addresses for clients."
+	log_prompt "是否允许同一 .ovpn 配置在多个设备上同时使用？"
+	log_prompt "注意：启用后客户端将不再有固定 IP。"
 	until [[ $MULTI_CLIENT =~ (y|n) ]]; do
-		read -rp "Allow multiple devices per client? [y/n]: " -e -i n MULTI_CLIENT
+		read -rp "每客户端允许多设备？[y/n]: " -e -i n MULTI_CLIENT
 	done
 	log_menu ""
-	log_prompt "Do you want to customize the tunnel MTU?"
-	log_menu "   MTU controls the maximum packet size. Lower values can help"
-	log_menu "   with connectivity issues on some networks (e.g., PPPoE, mobile)."
-	log_menu "   1) Default (1500) - works for most networks"
-	log_menu "   2) Custom"
+	log_prompt "是否自定义隧道 MTU？"
+	log_menu "   MTU 控制最大包大小，降低可改善部分网络（如 PPPoE、移动网）的连通性。"
+	log_menu "   1) 默认 (1500) - 适合多数网络"
+	log_menu "   2) 自定义"
 	until [[ $MTU_CHOICE =~ ^[1-2]$ ]]; do
-		read -rp "MTU choice [1-2]: " -e -i 1 MTU_CHOICE
+		read -rp "MTU [1-2]: " -e -i 1 MTU_CHOICE
 	done
 	if [[ $MTU_CHOICE == "2" ]]; then
 		until [[ $MTU =~ ^[0-9]+$ ]] && [[ $MTU -ge 576 ]] && [[ $MTU -le 65535 ]]; do
@@ -2378,13 +2504,13 @@ function installQuestions() {
 		done
 	fi
 	log_menu ""
-	log_prompt "Choose the authentication mode:"
-	log_menu "   1) PKI (Certificate Authority) - Traditional CA-based authentication (recommended for larger setups)"
-	log_menu "   2) Peer Fingerprint - Simplified WireGuard-like authentication using certificate fingerprints"
-	log_menu "      Note: Fingerprint mode requires OpenVPN 2.6+ and is ideal for small/home setups"
+	log_prompt "选择认证方式："
+	log_menu "   1) PKI（证书颁发机构）- 传统 CA 认证（适合较大规模）"
+	log_menu "   2) 对等指纹 - 类似 WireGuard 的简化认证（使用证书指纹）"
+	log_menu "      注意：指纹模式需 OpenVPN 2.6+，适合家庭/小规模"
 	local auth_mode_choice
 	until [[ $auth_mode_choice =~ ^[1-2]$ ]]; do
-		read -rp "Authentication mode [1-2]: " -e -i 1 auth_mode_choice
+		read -rp "认证方式 [1-2]: " -e -i 1 auth_mode_choice
 	done
 	case $auth_mode_choice in
 	1)
@@ -2396,19 +2522,19 @@ function installQuestions() {
 		local openvpn_ver
 		openvpn_ver=$(get_openvpn_version)
 		if [[ -n "$openvpn_ver" ]] && ! version_ge "$openvpn_ver" "2.6.0"; then
-			log_warn "OpenVPN $openvpn_ver detected. Fingerprint mode requires 2.6.0+."
-			log_warn "OpenVPN 2.6+ will be installed during setup."
+		log_warn "检测到 OpenVPN $openvpn_ver。指纹模式需要 2.6.0+。"
+		log_warn "安装过程中将安装 OpenVPN 2.6+。"
 		fi
 		;;
 	esac
 	log_menu ""
-	log_prompt "Do you want to customize encryption settings?"
-	log_prompt "Unless you know what you're doing, you should stick with the default parameters provided by the script."
-	log_prompt "Note that whatever you choose, all the choices presented in the script are safe (unlike OpenVPN's defaults)."
-	log_prompt "See https://github.com/angristan/openvpn-install#security-and-encryption to learn more."
+	log_prompt "是否自定义加密设置？"
+	log_prompt "若不熟悉，建议使用脚本提供的默认参数。"
+	log_prompt "脚本中所有选项均为安全配置（与 OpenVPN 默认不同）。"
+	log_prompt "详见 https://github.com/angristan/openvpn-install#security-and-encryption"
 	log_menu ""
 	until [[ $CUSTOMIZE_ENC =~ (y|n) ]]; do
-		read -rp "Customize encryption settings? [y/n]: " -e -i n CUSTOMIZE_ENC
+		read -rp "自定义加密设置？[y/n]: " -e -i n CUSTOMIZE_ENC
 	done
 	if [[ $CUSTOMIZE_ENC == "n" ]]; then
 		# Use default, sane and fast parameters
@@ -2418,21 +2544,21 @@ function installQuestions() {
 		CC_CIPHER="TLS-ECDHE-ECDSA-WITH-AES-128-GCM-SHA256"
 		TLS13_CIPHERSUITES="TLS_AES_256_GCM_SHA384:TLS_AES_128_GCM_SHA256:TLS_CHACHA20_POLY1305_SHA256"
 		TLS_VERSION_MIN="1.2"
-		TLS_GROUPS="X25519:prime256v1:secp384r1:secp521r1"
+		TLS_GROUPS="prime256v1"
 		HMAC_ALG="SHA256"
-		TLS_SIG="crypt-v2"
+		TLS_SIG="crypt"
 	else
 		log_menu ""
-		log_prompt "Choose which cipher you want to use for the data channel:"
-		log_menu "   1) AES-128-GCM (recommended)"
+		log_prompt "选择数据通道加密算法："
+		log_menu "   1) AES-128-GCM（推荐）"
 		log_menu "   2) AES-192-GCM"
 		log_menu "   3) AES-256-GCM"
 		log_menu "   4) AES-128-CBC"
 		log_menu "   5) AES-192-CBC"
 		log_menu "   6) AES-256-CBC"
-		log_menu "   7) CHACHA20-POLY1305 (requires OpenVPN 2.5+, good for devices without AES-NI)"
+		log_menu "   7) CHACHA20-POLY1305（需 OpenVPN 2.5+，适合无 AES-NI 的设备）"
 		until [[ $CIPHER_CHOICE =~ ^[1-7]$ ]]; do
-			read -rp "Cipher [1-7]: " -e -i 1 CIPHER_CHOICE
+			read -rp "加密算法 [1-7]: " -e -i 1 CIPHER_CHOICE
 		done
 		case $CIPHER_CHOICE in
 		1)
@@ -2458,44 +2584,44 @@ function installQuestions() {
 			;;
 		esac
 		log_menu ""
-		log_prompt "Choose what kind of certificate you want to use:"
-		log_menu "   1) ECDSA (recommended)"
+		log_prompt "选择证书类型："
+		log_menu "   1) ECDSA（推荐）"
 		log_menu "   2) RSA"
 		local cert_type_choice
 		until [[ $cert_type_choice =~ ^[1-2]$ ]]; do
-			read -rp "Certificate key type [1-2]: " -e -i 1 cert_type_choice
+			read -rp "证书密钥类型 [1-2]: " -e -i 1 cert_type_choice
 		done
 		case $cert_type_choice in
 		1)
 			CERT_TYPE="ecdsa"
 			log_menu ""
-			log_prompt "Choose which curve you want to use for the certificate's key:"
-			select_from_array "Curve" CERT_CURVES "prime256v1" CERT_CURVE
+			log_prompt "选择证书密钥使用的椭圆曲线："
+			select_from_array "曲线" CERT_CURVES "prime256v1" CERT_CURVE
 			;;
 		2)
 			CERT_TYPE="rsa"
 			log_menu ""
-			log_prompt "Choose which size you want to use for the certificate's RSA key:"
-			select_from_array "RSA key size" RSA_KEY_SIZES "2048" RSA_KEY_SIZE
+			log_prompt "选择证书 RSA 密钥长度："
+			select_from_array "RSA 密钥长度" RSA_KEY_SIZES "2048" RSA_KEY_SIZE
 			;;
 		esac
 		log_menu ""
-		log_prompt "Choose which cipher you want to use for the control channel:"
+		log_prompt "选择控制通道加密算法："
 		local cc_labels cc_values
 		if [[ $CERT_TYPE == "ecdsa" ]]; then
-			cc_labels=("ECDHE-ECDSA-AES-128-GCM-SHA256 (recommended)" "ECDHE-ECDSA-AES-256-GCM-SHA384" "ECDHE-ECDSA-CHACHA20-POLY1305 (OpenVPN 2.5+)")
+			cc_labels=("ECDHE-ECDSA-AES-128-GCM-SHA256（推荐）" "ECDHE-ECDSA-AES-256-GCM-SHA384" "ECDHE-ECDSA-CHACHA20-POLY1305（OpenVPN 2.5+）")
 			cc_values=("TLS-ECDHE-ECDSA-WITH-AES-128-GCM-SHA256" "TLS-ECDHE-ECDSA-WITH-AES-256-GCM-SHA384" "TLS-ECDHE-ECDSA-WITH-CHACHA20-POLY1305-SHA256")
 		else
-			cc_labels=("ECDHE-RSA-AES-128-GCM-SHA256 (recommended)" "ECDHE-RSA-AES-256-GCM-SHA384" "ECDHE-RSA-CHACHA20-POLY1305 (OpenVPN 2.5+)")
+			cc_labels=("ECDHE-RSA-AES-128-GCM-SHA256（推荐）" "ECDHE-RSA-AES-256-GCM-SHA384" "ECDHE-RSA-CHACHA20-POLY1305（OpenVPN 2.5+）")
 			cc_values=("TLS-ECDHE-RSA-WITH-AES-128-GCM-SHA256" "TLS-ECDHE-RSA-WITH-AES-256-GCM-SHA384" "TLS-ECDHE-RSA-WITH-CHACHA20-POLY1305-SHA256")
 		fi
-		select_with_labels "Control channel cipher" cc_labels cc_values "${cc_values[0]}" CC_CIPHER
+		select_with_labels "控制通道加密" cc_labels cc_values "${cc_values[0]}" CC_CIPHER
 		log_menu ""
-		log_prompt "Choose the minimum TLS version:"
-		log_menu "   1) TLS 1.2 (recommended, compatible with all clients)"
-		log_menu "   2) TLS 1.3 (more secure, requires OpenVPN 2.5+ clients)"
+		log_prompt "选择最低 TLS 版本："
+		log_menu "   1) TLS 1.2（推荐，兼容所有客户端）"
+		log_menu "   2) TLS 1.3（更安全，需 OpenVPN 2.5+ 客户端）"
 		until [[ $TLS_VERSION_MIN_CHOICE =~ ^[1-2]$ ]]; do
-			read -rp "Minimum TLS version [1-2]: " -e -i 1 TLS_VERSION_MIN_CHOICE
+			read -rp "最低 TLS 版本 [1-2]: " -e -i 1 TLS_VERSION_MIN_CHOICE
 		done
 		case $TLS_VERSION_MIN_CHOICE in
 		1)
@@ -2506,13 +2632,13 @@ function installQuestions() {
 			;;
 		esac
 		log_menu ""
-		log_prompt "Choose TLS 1.3 cipher suites (used when TLS 1.3 is negotiated):"
-		log_menu "   1) All secure ciphers (recommended)"
-		log_menu "   2) AES-256-GCM only"
-		log_menu "   3) AES-128-GCM only"
-		log_menu "   4) ChaCha20-Poly1305 only"
+		log_prompt "选择 TLS 1.3 加密套件（在协商为 TLS 1.3 时使用）："
+		log_menu "   1) 全部安全套件（推荐）"
+		log_menu "   2) 仅 AES-256-GCM"
+		log_menu "   3) 仅 AES-128-GCM"
+		log_menu "   4) 仅 ChaCha20-Poly1305"
 		until [[ $TLS13_CIPHER_CHOICE =~ ^[1-4]$ ]]; do
-			read -rp "TLS 1.3 cipher suite [1-4]: " -e -i 1 TLS13_CIPHER_CHOICE
+			read -rp "TLS 1.3 加密套件 [1-4]: " -e -i 1 TLS13_CIPHER_CHOICE
 		done
 		case $TLS13_CIPHER_CHOICE in
 		1)
@@ -2529,12 +2655,12 @@ function installQuestions() {
 			;;
 		esac
 		log_menu ""
-		log_prompt "Choose TLS key exchange groups (for ECDH key exchange):"
-		log_menu "   1) All modern curves (recommended)"
-		log_menu "   2) X25519 only (most secure, may have compatibility issues)"
-		log_menu "   3) NIST curves only (prime256v1, secp384r1, secp521r1)"
+		log_prompt "选择 TLS 密钥交换组（ECDH）："
+		log_menu "   1) 全部现代曲线（推荐）"
+		log_menu "   2) 仅 X25519（最安全，可能有兼容问题）"
+		log_menu "   3) 仅 NIST 曲线（prime256v1, secp384r1, secp521r1）"
 		until [[ $TLS_GROUPS_CHOICE =~ ^[1-3]$ ]]; do
-			read -rp "TLS groups [1-3]: " -e -i 1 TLS_GROUPS_CHOICE
+			read -rp "TLS 密钥交换组 [1-3]: " -e -i 1 TLS_GROUPS_CHOICE
 		done
 		case $TLS_GROUPS_CHOICE in
 		1)
@@ -2550,16 +2676,16 @@ function installQuestions() {
 		log_menu ""
 		# The "auth" options behaves differently with AEAD ciphers (GCM, ChaCha20-Poly1305)
 		if [[ $CIPHER =~ CBC$ ]]; then
-			log_prompt "The digest algorithm authenticates data channel packets and tls-auth packets from the control channel."
+			log_prompt "摘要算法用于认证数据通道包及控制通道的 tls-auth 包。"
 		elif [[ $CIPHER =~ GCM$ ]] || [[ $CIPHER == "CHACHA20-POLY1305" ]]; then
-			log_prompt "The digest algorithm authenticates tls-auth packets from the control channel."
+			log_prompt "摘要算法用于认证控制通道的 tls-auth 包。"
 		fi
-		log_prompt "Which digest algorithm do you want to use for HMAC?"
-		log_menu "   1) SHA-256 (recommended)"
+		log_prompt "选择 HMAC 摘要算法："
+		log_menu "   1) SHA-256（推荐）"
 		log_menu "   2) SHA-384"
 		log_menu "   3) SHA-512"
 		until [[ $HMAC_ALG_CHOICE =~ ^[1-3]$ ]]; do
-			read -rp "Digest algorithm [1-3]: " -e -i 1 HMAC_ALG_CHOICE
+			read -rp "摘要算法 [1-3]: " -e -i 1 HMAC_ALG_CHOICE
 		done
 		case $HMAC_ALG_CHOICE in
 		1)
@@ -2573,16 +2699,43 @@ function installQuestions() {
 			;;
 		esac
 		log_menu ""
-		log_prompt "You can add an additional layer of security to the control channel."
-		local tls_sig_labels=("tls-crypt-v2 (recommended): Encrypts control channel, unique key per client" "tls-crypt: Encrypts control channel, shared key for all clients" "tls-auth: Authenticates control channel, no encryption")
-		select_with_labels "Control channel security" tls_sig_labels TLS_SIG_MODES "crypt-v2" TLS_SIG
+		log_prompt "可为控制通道增加一层安全。"
+		local tls_sig_labels=("tls-crypt-v2（推荐）：加密控制通道，每客户端独立密钥" "tls-crypt：加密控制通道，所有客户端共享密钥" "tls-auth：仅认证控制通道，不加密")
+		select_with_labels "控制通道安全" tls_sig_labels TLS_SIG_MODES "crypt" TLS_SIG
 	fi
 	log_menu ""
-	log_prompt "Okay, that was all I needed. We are ready to setup your OpenVPN server now."
-	log_prompt "You will be able to generate a client at the end of the installation."
+	log_prompt "走 VPN 的网段：只有这些网段的流量会通过 VPN（分流模式）。"
+	log_prompt "请输入逗号分隔的 IPv4 CIDR，例如 192.168.1.0/24,10.0.0.0/8，留空则不推送额外路由。"
+	# Auto-detect local LAN subnet as default (e.g. 192.168.110.0/24 from default route interface)
+	DEFAULT_PUSH_ROUTES=""
+	_detect_nic=$(ip -4 route ls 2>/dev/null | grep default | grep -Po '(?<=dev )(\S+)' | head -1)
+	if [[ -n $_detect_nic ]]; then
+		_detect_subnet=$(ip -4 route show dev "$_detect_nic" 2>/dev/null | awk '/scope link/ {print $1}' | head -1)
+		if [[ -n $_detect_subnet ]] && echo "$_detect_subnet" | grep -qE '^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)'; then
+			DEFAULT_PUSH_ROUTES="$_detect_subnet"
+			log_prompt "已根据本机网卡自动识别局域网网段: $DEFAULT_PUSH_ROUTES"
+		fi
+	fi
+	PUSH_ROUTES=${PUSH_ROUTES:-$DEFAULT_PUSH_ROUTES}
+	read -rp "走 VPN 的网段（留空跳过）: " -e -i "$PUSH_ROUTES" PUSH_ROUTES
+	# Normalize: trim spaces, filter empty
+	PUSH_ROUTES=$(echo "$PUSH_ROUTES" | sed 's/,[[:space:]]*/,/g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | sed 's/,[[:space:]]*$//')
+	log_menu ""
+	log_prompt "性能优化：可根据网络与主机环境选择，以提升吞吐或节省带宽。"
+	log_menu "   1) 默认（推荐）：不压缩、系统缓冲区、mssfix 1400，适合多数场景"
+	log_menu "   2) 高吞吐：精简配置（无 sndbuf/rcvbuf/mssfix），与高性能备份一致"
+	log_menu "   3) 低带宽：启用 lz4 压缩，适合慢速或按流量计费链路"
+	log_menu "   4) 关闭：使用 OpenVPN 默认，不做额外优化"
+	PERF_OPT=${PERF_OPT:-2}
+	until [[ $PERF_OPT =~ ^[1-4]$ ]]; do
+		read -rp "请选择 [1-4]: " -e -i 2 PERF_OPT
+	done
+	log_menu ""
+	log_prompt "以上为全部配置项。即将开始安装 OpenVPN 服务器。"
+	log_prompt "安装完成后可生成客户端配置。"
 	APPROVE_INSTALL=${APPROVE_INSTALL:-n}
 	if [[ $APPROVE_INSTALL =~ n ]]; then
-		read -n1 -r -p "Press any key to continue..."
+		read -n1 -r -p "按任意键继续..."
 	fi
 }
 
@@ -2594,8 +2747,8 @@ function installOpenVPN() {
 		fi
 
 		# Log non-interactive mode and parameters
-		log_info "=== OpenVPN Non-Interactive Install ==="
-		log_info "Running in non-interactive mode with the following settings:"
+		log_info "=== OpenVPN 非交互安装 ==="
+		log_info "以非交互模式运行，当前参数："
 		log_info "  ENDPOINT=$ENDPOINT"
 		log_info "  ENDPOINT_TYPE=$ENDPOINT_TYPE"
 		log_info "  CLIENT_IPV4=$CLIENT_IPV4"
@@ -2611,6 +2764,8 @@ function installOpenVPN() {
 		log_info "  CLIENT=$CLIENT"
 		log_info "  CLIENT_CERT_DURATION_DAYS=$CLIENT_CERT_DURATION_DAYS"
 		log_info "  SERVER_CERT_DURATION_DAYS=$SERVER_CERT_DURATION_DAYS"
+		[[ -n $PUSH_ROUTES ]] && log_info "  PUSH_ROUTES=$PUSH_ROUTES"
+		log_info "  PERF_OPT=$PERF_OPT"
 	fi
 
 	# Get the "public" interface from the default route
@@ -2621,10 +2776,10 @@ function installOpenVPN() {
 
 	# $NIC can not be empty for script rm-openvpn-rules.sh
 	if [[ -z $NIC ]]; then
-		log_warn "Could not detect public interface."
-		log_info "This needs for setup MASQUERADE."
+		log_warn "无法检测公网接口。"
+		log_info "设置 MASQUERADE 需要该接口。"
 		until [[ $CONTINUE =~ (y|n) ]]; do
-			read -rp "Continue? [y/n]: " -e CONTINUE
+			read -rp "是否继续？[y/n]: " -e CONTINUE
 		done
 		if [[ $CONTINUE == "n" ]]; then
 			exit 1
@@ -2634,16 +2789,30 @@ function installOpenVPN() {
 	# If OpenVPN isn't installed yet, install it. This script is more-or-less
 	# idempotent on multiple runs, but will only install OpenVPN from upstream
 	# the first time.
-	if [[ ! -e /etc/openvpn/server/server.conf ]]; then
-		log_header "Installing OpenVPN"
+	if [[ ! -e /etc/openvpn/server.conf ]]; then
+		log_header "正在安装 OpenVPN"
 
 		# Setup official OpenVPN repository for latest versions
 		installOpenVPNRepo
 
-		log_info "Installing OpenVPN and dependencies..."
+		log_info "正在安装 OpenVPN 及依赖..."
 		# socat is used for communicating with the OpenVPN management interface (client disconnect on revoke)
 		if [[ $OS =~ (debian|ubuntu) ]]; then
-			run_cmd_fatal "Installing OpenVPN" apt-get install -y openvpn iptables openssl curl ca-certificates tar dnsutils socat
+			run_cmd_fatal "正在安装 OpenVPN" apt-get install -y openvpn iptables openssl curl ca-certificates tar dnsutils socat
+			# 自动安装 DCO 内核模块以支持数据通道卸载（需先装内核头文件供 DKMS 编译，包不存在时跳过）
+			_kver=$(uname -r)
+			if run_cmd "安装当前内核头文件 (linux-headers-$_kver)" apt-get install -y "linux-headers-$_kver" 2>/dev/null; then
+				:
+			elif run_cmd "安装内核头文件 (linux-headers-amd64)" apt-get install -y linux-headers-amd64 2>/dev/null; then
+				:
+			fi
+			if run_cmd "安装 DCO 内核模块 (openvpn-dco-dkms)" apt-get install -y openvpn-dco-dkms; then
+				if modprobe ovpn-dco 2>/dev/null; then
+					log_info "ovpn-dco 模块已加载。"
+				else
+					log_info "ovpn-dco 已安装，首次使用需重启后执行 modprobe ovpn-dco。"
+				fi
+			fi
 		elif [[ $OS == 'centos' ]]; then
 			run_cmd_fatal "Installing OpenVPN" yum install -y openvpn iptables openssl ca-certificates curl tar bind-utils socat 'policycoreutils-python*'
 		elif [[ $OS == 'oracle' ]]; then
@@ -2665,23 +2834,23 @@ function installOpenVPN() {
 			if ! openvpnVersionAtLeast "2.5"; then
 				log_fatal "ChaCha20-Poly1305 requires OpenVPN 2.5 or later. Installed version: $installed_version"
 			fi
-			log_info "OpenVPN version supports ChaCha20-Poly1305"
+			log_info "当前 OpenVPN 版本支持 ChaCha20-Poly1305"
 		fi
 
 		# Check Data Channel Offload (DCO) availability
 		if isDCOAvailable; then
 			# Check if configuration is DCO-compatible (udp or udp6)
 			if [[ $PROTOCOL =~ ^udp ]] && [[ $CIPHER =~ (GCM|CHACHA20-POLY1305) ]]; then
-				log_info "Data Channel Offload (DCO) is available and will be used for improved performance"
+				log_info "数据通道卸载 (DCO) 可用，将用于提升性能"
 			else
-				log_info "Data Channel Offload (DCO) is available but not enabled (requires UDP, AEAD cipher)"
+				log_info "数据通道卸载 (DCO) 可用但未启用（需 UDP + AEAD 加密）"
 			fi
 		else
-			log_info "Data Channel Offload (DCO) is not available (requires OpenVPN 2.6+ and kernel support)"
+			log_info "数据通道卸载 (DCO) 不可用（需 OpenVPN 2.6+ 及内核支持）。Debian/Ubuntu 可安装 openvpn-dco-dkms 后执行 modprobe ovpn-dco，详见 FAQ。"
 		fi
 
 		# Create the server directory (OpenVPN 2.4+ directory structure)
-		run_cmd_fatal "Creating server directory" mkdir -p /etc/openvpn/server
+		run_cmd_fatal "创建 OpenVPN 目录" mkdir -p /etc/openvpn
 	fi
 
 	# Determine which user/group OpenVPN should run as
@@ -2713,20 +2882,23 @@ function installOpenVPN() {
 	fi
 
 	# Install the latest version of easy-rsa from source, if not already installed.
-	if [[ ! -d /etc/openvpn/server/easy-rsa/ ]]; then
-		run_cmd_fatal "Downloading Easy-RSA v${EASYRSA_VERSION}" curl -fL --retry 5 -o ~/easy-rsa.tgz "https://github.com/OpenVPN/easy-rsa/releases/download/v${EASYRSA_VERSION}/EasyRSA-${EASYRSA_VERSION}.tgz"
-		log_info "Verifying Easy-RSA checksum..."
+	if [[ ! -d /etc/openvpn/easy-rsa/ ]]; then
+		download_with_mirror_fallback \
+			"https://github.com/OpenVPN/easy-rsa/releases/download/v${EASYRSA_VERSION}/EasyRSA-${EASYRSA_VERSION}.tgz" \
+			"$HOME/easy-rsa.tgz" \
+			"Easy-RSA v${EASYRSA_VERSION}"
+		log_info "正在校验 Easy-RSA 校验和..."
 		CHECKSUM_OUTPUT=$(echo "${EASYRSA_SHA256}  $HOME/easy-rsa.tgz" | sha256sum -c 2>&1) || {
 			_log_to_file "[CHECKSUM] $CHECKSUM_OUTPUT"
 			run_cmd "Cleaning up failed download" rm -f ~/easy-rsa.tgz
 			log_fatal "SHA256 checksum verification failed for easy-rsa download!"
 		}
 		_log_to_file "[CHECKSUM] $CHECKSUM_OUTPUT"
-		run_cmd_fatal "Creating Easy-RSA directory" mkdir -p /etc/openvpn/server/easy-rsa
-		run_cmd_fatal "Extracting Easy-RSA" tar xzf ~/easy-rsa.tgz --strip-components=1 --no-same-owner --directory /etc/openvpn/server/easy-rsa
+		run_cmd_fatal "Creating Easy-RSA directory" mkdir -p /etc/openvpn/easy-rsa
+		run_cmd_fatal "Extracting Easy-RSA" tar xzf ~/easy-rsa.tgz --strip-components=1 --no-same-owner --directory /etc/openvpn/easy-rsa
 		run_cmd "Cleaning up archive" rm -f ~/easy-rsa.tgz
 
-		cd /etc/openvpn/server/easy-rsa/ || return
+		cd /etc/openvpn/easy-rsa/ || return
 		case $CERT_TYPE in
 		ecdsa)
 			echo "set_var EASYRSA_ALGO ec" >vars
@@ -2745,18 +2917,18 @@ function installOpenVPN() {
 		echo "$SERVER_NAME" >SERVER_NAME_GENERATED
 
 		# Create the PKI, set up the CA, the DH params and the server certificate
-		log_info "Initializing PKI..."
-		run_cmd_fatal "Initializing PKI" ./easyrsa init-pki
+		log_info "正在初始化 PKI..."
+		run_cmd_fatal "初始化 PKI" ./easyrsa init-pki
 
 		if [[ $AUTH_MODE == "pki" ]]; then
 			# Traditional PKI mode with CA
 			export EASYRSA_CA_EXPIRE=$DEFAULT_CERT_VALIDITY_DURATION_DAYS
-			log_info "Building CA..."
-			run_cmd_fatal "Building CA" ./easyrsa --batch --req-cn="$SERVER_CN" build-ca nopass
+			log_info "正在构建 CA..."
+			run_cmd_fatal "构建 CA" ./easyrsa --batch --req-cn="$SERVER_CN" build-ca nopass
 
 			export EASYRSA_CERT_EXPIRE=${SERVER_CERT_DURATION_DAYS:-$DEFAULT_CERT_VALIDITY_DURATION_DAYS}
-			log_info "Building server certificate..."
-			run_cmd_fatal "Building server certificate" ./easyrsa --batch build-server-full "$SERVER_NAME" nopass
+			log_info "正在构建服务器证书..."
+			run_cmd_fatal "构建服务器证书" ./easyrsa --batch build-server-full "$SERVER_NAME" nopass
 			export EASYRSA_CRL_DAYS=$DEFAULT_CRL_VALIDITY_DURATION_DAYS
 			run_cmd_fatal "Generating CRL" ./easyrsa gen-crl
 		else
@@ -2771,24 +2943,24 @@ function installOpenVPN() {
 				log_error "Failed to extract server certificate fingerprint"
 				exit 1
 			fi
-			mkdir -p /etc/openvpn/server
-			echo "$SERVER_FINGERPRINT" >/etc/openvpn/server/server-fingerprint
+			mkdir -p /etc/openvpn
+			echo "$SERVER_FINGERPRINT" >/etc/openvpn/server-fingerprint
 			log_info "Server fingerprint: $SERVER_FINGERPRINT"
 		fi
 
-		log_info "Generating TLS key..."
+		log_info "正在生成 TLS 密钥..."
 		case $TLS_SIG in
 		crypt-v2)
 			# Generate tls-crypt-v2 server key
-			run_cmd_fatal "Generating tls-crypt-v2 server key" openvpn --genkey tls-crypt-v2-server /etc/openvpn/server/tls-crypt-v2.key
+			run_cmd_fatal "Generating tls-crypt-v2 server key" openvpn --genkey tls-crypt-v2-server /etc/openvpn/tls-crypt-v2.key
 			;;
 		crypt)
 			# Generate tls-crypt key
-			run_cmd_fatal "Generating tls-crypt key" openvpn --genkey secret /etc/openvpn/server/tls-crypt.key
+			run_cmd_fatal "Generating tls-crypt key" openvpn --genkey secret /etc/openvpn/tls-crypt.key
 			;;
 		auth)
 			# Generate tls-auth key
-			run_cmd_fatal "Generating tls-auth key" openvpn --genkey secret /etc/openvpn/server/tls-auth.key
+			run_cmd_fatal "Generating tls-auth key" openvpn --genkey secret /etc/openvpn/tls-auth.key
 			;;
 		esac
 		# Store auth mode for later use
@@ -2796,7 +2968,7 @@ function installOpenVPN() {
 	else
 		# If easy-rsa is already installed, grab the generated SERVER_NAME
 		# for client configs
-		cd /etc/openvpn/server/easy-rsa/ || return
+		cd /etc/openvpn/easy-rsa/ || return
 		SERVER_NAME=$(cat SERVER_NAME_GENERATED)
 		# Read stored auth mode
 		if [[ -f AUTH_MODE_GENERATED ]]; then
@@ -2808,45 +2980,44 @@ function installOpenVPN() {
 	fi
 
 	# Move all the generated files
-	log_info "Copying certificates..."
+	log_info "正在复制证书..."
 	if [[ $AUTH_MODE == "pki" ]]; then
-		run_cmd_fatal "Copying certificates to /etc/openvpn/server" cp pki/ca.crt pki/private/ca.key "pki/issued/$SERVER_NAME.crt" "pki/private/$SERVER_NAME.key" /etc/openvpn/server/easy-rsa/pki/crl.pem /etc/openvpn/server
+		run_cmd_fatal "复制证书到 /etc/openvpn" cp pki/ca.crt pki/private/ca.key "pki/issued/$SERVER_NAME.crt" "pki/private/$SERVER_NAME.key" /etc/openvpn/easy-rsa/pki/crl.pem /etc/openvpn
 		# Make cert revocation list readable for non-root
-		run_cmd "Setting CRL permissions" chmod 644 /etc/openvpn/server/crl.pem
+		run_cmd "Setting CRL permissions" chmod 644 /etc/openvpn/crl.pem
 	else
 		# Fingerprint mode: only copy server cert and key (no CA or CRL)
-		run_cmd_fatal "Copying certificates to /etc/openvpn/server" cp "pki/issued/$SERVER_NAME.crt" "pki/private/$SERVER_NAME.key" /etc/openvpn/server
+		run_cmd_fatal "复制证书到 /etc/openvpn" cp "pki/issued/$SERVER_NAME.crt" "pki/private/$SERVER_NAME.key" /etc/openvpn
 	fi
 
 	# Generate server.conf
-	log_info "Generating server configuration..."
-	echo "port $PORT" >/etc/openvpn/server/server.conf
+	log_info "正在生成服务器配置..."
+	echo "port $PORT" >/etc/openvpn/server.conf
 
 	# Protocol selection: use proto6 variants if endpoint is IPv6
 	if [[ $ENDPOINT_TYPE == "6" ]]; then
-		echo "proto ${PROTOCOL}6" >>/etc/openvpn/server/server.conf
+		echo "proto ${PROTOCOL}6" >>/etc/openvpn/server.conf
 	else
-		echo "proto $PROTOCOL" >>/etc/openvpn/server/server.conf
+		echo "proto $PROTOCOL" >>/etc/openvpn/server.conf
 	fi
 
 	if [[ $MULTI_CLIENT == "y" ]]; then
-		echo "duplicate-cn" >>/etc/openvpn/server/server.conf
+		echo "duplicate-cn" >>/etc/openvpn/server.conf
 	fi
 
-	echo "dev tun" >>/etc/openvpn/server/server.conf
+	echo "dev tun" >>/etc/openvpn/server.conf
 	# Only add user/group if systemd doesn't handle it (avoids double privilege drop)
 	if [[ $SYSTEMD_HANDLES_USER == "false" ]]; then
 		echo "user $OPENVPN_USER
-group $OPENVPN_GROUP" >>/etc/openvpn/server/server.conf
+group $OPENVPN_GROUP" >>/etc/openvpn/server.conf
 	fi
 	echo "persist-key
 persist-tun
 keepalive 10 120
-topology subnet" >>/etc/openvpn/server/server.conf
+topology subnet" >>/etc/openvpn/server.conf
 
-	# IPv4 server directive - always assign IPv4 to clients for proper routing
-	# Even for IPv6-only mode, we need IPv4 addresses so redirect-gateway def1 can block IPv4 leaks
-	echo "server $VPN_SUBNET_IPV4 255.255.255.0" >>/etc/openvpn/server/server.conf
+	# IPv4 server directive - assign IPv4 to clients for VPN subnet access
+	echo "server $VPN_SUBNET_IPV4 255.255.255.0" >>/etc/openvpn/server.conf
 
 	# IPv6 server directive (only if clients get IPv6)
 	if [[ $CLIENT_IPV6 == "y" ]]; then
@@ -2854,12 +3025,12 @@ topology subnet" >>/etc/openvpn/server/server.conf
 			echo "server-ipv6 ${VPN_SUBNET_IPV6}/112"
 			echo "tun-ipv6"
 			echo "push tun-ipv6"
-		} >>/etc/openvpn/server/server.conf
+		} >>/etc/openvpn/server.conf
 	fi
 
 	# ifconfig-pool-persist is incompatible with duplicate-cn
 	if [[ $MULTI_CLIENT != "y" ]]; then
-		echo "ifconfig-pool-persist ipp.txt" >>/etc/openvpn/server/server.conf
+		echo "ifconfig-pool-persist ipp.txt" >>/etc/openvpn/server.conf
 	fi
 
 	# DNS resolvers
@@ -2876,186 +3047,257 @@ topology subnet" >>/etc/openvpn/server/server.conf
 		sed -ne 's/^nameserver[[:space:]]\+\([^[:space:]]\+\).*$/\1/p' $RESOLVCONF | while read -r line; do
 			# Copy IPv4 resolvers if client has IPv4, or IPv6 resolvers if client has IPv6
 			if [[ $line =~ ^[0-9.]*$ ]] && [[ $CLIENT_IPV4 == 'y' ]]; then
-				echo "push \"dhcp-option DNS $line\"" >>/etc/openvpn/server/server.conf
+				echo "push \"dhcp-option DNS $line\"" >>/etc/openvpn/server.conf
 			elif [[ $line =~ : ]] && [[ $CLIENT_IPV6 == 'y' ]]; then
-				echo "push \"dhcp-option DNS $line\"" >>/etc/openvpn/server/server.conf
+				echo "push \"dhcp-option DNS $line\"" >>/etc/openvpn/server.conf
 			fi
 		done
 		;;
 	unbound)
 		if [[ $CLIENT_IPV4 == 'y' ]]; then
-			echo "push \"dhcp-option DNS $VPN_GATEWAY_IPV4\"" >>/etc/openvpn/server/server.conf
+			echo "push \"dhcp-option DNS $VPN_GATEWAY_IPV4\"" >>/etc/openvpn/server.conf
 		fi
 		if [[ $CLIENT_IPV6 == 'y' ]]; then
-			echo "push \"dhcp-option DNS $VPN_GATEWAY_IPV6\"" >>/etc/openvpn/server/server.conf
+			echo "push \"dhcp-option DNS $VPN_GATEWAY_IPV6\"" >>/etc/openvpn/server.conf
 		fi
 		;;
 	cloudflare)
 		if [[ $CLIENT_IPV4 == 'y' ]]; then
-			echo 'push "dhcp-option DNS 1.0.0.1"' >>/etc/openvpn/server/server.conf
-			echo 'push "dhcp-option DNS 1.1.1.1"' >>/etc/openvpn/server/server.conf
+			echo 'push "dhcp-option DNS 1.0.0.1"' >>/etc/openvpn/server.conf
+			echo 'push "dhcp-option DNS 1.1.1.1"' >>/etc/openvpn/server.conf
 		fi
 		if [[ $CLIENT_IPV6 == 'y' ]]; then
-			echo 'push "dhcp-option DNS 2606:4700:4700::1001"' >>/etc/openvpn/server/server.conf
-			echo 'push "dhcp-option DNS 2606:4700:4700::1111"' >>/etc/openvpn/server/server.conf
+			echo 'push "dhcp-option DNS 2606:4700:4700::1001"' >>/etc/openvpn/server.conf
+			echo 'push "dhcp-option DNS 2606:4700:4700::1111"' >>/etc/openvpn/server.conf
 		fi
 		;;
 	quad9)
 		if [[ $CLIENT_IPV4 == 'y' ]]; then
-			echo 'push "dhcp-option DNS 9.9.9.9"' >>/etc/openvpn/server/server.conf
-			echo 'push "dhcp-option DNS 149.112.112.112"' >>/etc/openvpn/server/server.conf
+			echo 'push "dhcp-option DNS 9.9.9.9"' >>/etc/openvpn/server.conf
+			echo 'push "dhcp-option DNS 149.112.112.112"' >>/etc/openvpn/server.conf
 		fi
 		if [[ $CLIENT_IPV6 == 'y' ]]; then
-			echo 'push "dhcp-option DNS 2620:fe::fe"' >>/etc/openvpn/server/server.conf
-			echo 'push "dhcp-option DNS 2620:fe::9"' >>/etc/openvpn/server/server.conf
+			echo 'push "dhcp-option DNS 2620:fe::fe"' >>/etc/openvpn/server.conf
+			echo 'push "dhcp-option DNS 2620:fe::9"' >>/etc/openvpn/server.conf
 		fi
 		;;
 	quad9-uncensored)
 		if [[ $CLIENT_IPV4 == 'y' ]]; then
-			echo 'push "dhcp-option DNS 9.9.9.10"' >>/etc/openvpn/server/server.conf
-			echo 'push "dhcp-option DNS 149.112.112.10"' >>/etc/openvpn/server/server.conf
+			echo 'push "dhcp-option DNS 9.9.9.10"' >>/etc/openvpn/server.conf
+			echo 'push "dhcp-option DNS 149.112.112.10"' >>/etc/openvpn/server.conf
 		fi
 		if [[ $CLIENT_IPV6 == 'y' ]]; then
-			echo 'push "dhcp-option DNS 2620:fe::10"' >>/etc/openvpn/server/server.conf
-			echo 'push "dhcp-option DNS 2620:fe::fe:10"' >>/etc/openvpn/server/server.conf
+			echo 'push "dhcp-option DNS 2620:fe::10"' >>/etc/openvpn/server.conf
+			echo 'push "dhcp-option DNS 2620:fe::fe:10"' >>/etc/openvpn/server.conf
 		fi
 		;;
 	fdn)
 		if [[ $CLIENT_IPV4 == 'y' ]]; then
-			echo 'push "dhcp-option DNS 80.67.169.40"' >>/etc/openvpn/server/server.conf
-			echo 'push "dhcp-option DNS 80.67.169.12"' >>/etc/openvpn/server/server.conf
+			echo 'push "dhcp-option DNS 80.67.169.40"' >>/etc/openvpn/server.conf
+			echo 'push "dhcp-option DNS 80.67.169.12"' >>/etc/openvpn/server.conf
 		fi
 		if [[ $CLIENT_IPV6 == 'y' ]]; then
-			echo 'push "dhcp-option DNS 2001:910:800::40"' >>/etc/openvpn/server/server.conf
-			echo 'push "dhcp-option DNS 2001:910:800::12"' >>/etc/openvpn/server/server.conf
+			echo 'push "dhcp-option DNS 2001:910:800::40"' >>/etc/openvpn/server.conf
+			echo 'push "dhcp-option DNS 2001:910:800::12"' >>/etc/openvpn/server.conf
 		fi
 		;;
 	dnswatch)
 		if [[ $CLIENT_IPV4 == 'y' ]]; then
-			echo 'push "dhcp-option DNS 84.200.69.80"' >>/etc/openvpn/server/server.conf
-			echo 'push "dhcp-option DNS 84.200.70.40"' >>/etc/openvpn/server/server.conf
+			echo 'push "dhcp-option DNS 84.200.69.80"' >>/etc/openvpn/server.conf
+			echo 'push "dhcp-option DNS 84.200.70.40"' >>/etc/openvpn/server.conf
 		fi
 		if [[ $CLIENT_IPV6 == 'y' ]]; then
-			echo 'push "dhcp-option DNS 2001:1608:10:25::1c04:b12f"' >>/etc/openvpn/server/server.conf
-			echo 'push "dhcp-option DNS 2001:1608:10:25::9249:d69b"' >>/etc/openvpn/server/server.conf
+			echo 'push "dhcp-option DNS 2001:1608:10:25::1c04:b12f"' >>/etc/openvpn/server.conf
+			echo 'push "dhcp-option DNS 2001:1608:10:25::9249:d69b"' >>/etc/openvpn/server.conf
 		fi
 		;;
 	opendns)
 		if [[ $CLIENT_IPV4 == 'y' ]]; then
-			echo 'push "dhcp-option DNS 208.67.222.222"' >>/etc/openvpn/server/server.conf
-			echo 'push "dhcp-option DNS 208.67.220.220"' >>/etc/openvpn/server/server.conf
+			echo 'push "dhcp-option DNS 208.67.222.222"' >>/etc/openvpn/server.conf
+			echo 'push "dhcp-option DNS 208.67.220.220"' >>/etc/openvpn/server.conf
 		fi
 		if [[ $CLIENT_IPV6 == 'y' ]]; then
-			echo 'push "dhcp-option DNS 2620:119:35::35"' >>/etc/openvpn/server/server.conf
-			echo 'push "dhcp-option DNS 2620:119:53::53"' >>/etc/openvpn/server/server.conf
+			echo 'push "dhcp-option DNS 2620:119:35::35"' >>/etc/openvpn/server.conf
+			echo 'push "dhcp-option DNS 2620:119:53::53"' >>/etc/openvpn/server.conf
 		fi
 		;;
 	google)
 		if [[ $CLIENT_IPV4 == 'y' ]]; then
-			echo 'push "dhcp-option DNS 8.8.8.8"' >>/etc/openvpn/server/server.conf
-			echo 'push "dhcp-option DNS 8.8.4.4"' >>/etc/openvpn/server/server.conf
+			echo 'push "dhcp-option DNS 8.8.8.8"' >>/etc/openvpn/server.conf
+			echo 'push "dhcp-option DNS 8.8.4.4"' >>/etc/openvpn/server.conf
 		fi
 		if [[ $CLIENT_IPV6 == 'y' ]]; then
-			echo 'push "dhcp-option DNS 2001:4860:4860::8888"' >>/etc/openvpn/server/server.conf
-			echo 'push "dhcp-option DNS 2001:4860:4860::8844"' >>/etc/openvpn/server/server.conf
+			echo 'push "dhcp-option DNS 2001:4860:4860::8888"' >>/etc/openvpn/server.conf
+			echo 'push "dhcp-option DNS 2001:4860:4860::8844"' >>/etc/openvpn/server.conf
 		fi
 		;;
 	yandex)
 		if [[ $CLIENT_IPV4 == 'y' ]]; then
-			echo 'push "dhcp-option DNS 77.88.8.8"' >>/etc/openvpn/server/server.conf
-			echo 'push "dhcp-option DNS 77.88.8.1"' >>/etc/openvpn/server/server.conf
+			echo 'push "dhcp-option DNS 77.88.8.8"' >>/etc/openvpn/server.conf
+			echo 'push "dhcp-option DNS 77.88.8.1"' >>/etc/openvpn/server.conf
 		fi
 		if [[ $CLIENT_IPV6 == 'y' ]]; then
-			echo 'push "dhcp-option DNS 2a02:6b8::feed:0ff"' >>/etc/openvpn/server/server.conf
-			echo 'push "dhcp-option DNS 2a02:6b8:0:1::feed:0ff"' >>/etc/openvpn/server/server.conf
+			echo 'push "dhcp-option DNS 2a02:6b8::feed:0ff"' >>/etc/openvpn/server.conf
+			echo 'push "dhcp-option DNS 2a02:6b8:0:1::feed:0ff"' >>/etc/openvpn/server.conf
 		fi
 		;;
 	adguard)
 		if [[ $CLIENT_IPV4 == 'y' ]]; then
-			echo 'push "dhcp-option DNS 94.140.14.14"' >>/etc/openvpn/server/server.conf
-			echo 'push "dhcp-option DNS 94.140.15.15"' >>/etc/openvpn/server/server.conf
+			echo 'push "dhcp-option DNS 94.140.14.14"' >>/etc/openvpn/server.conf
+			echo 'push "dhcp-option DNS 94.140.15.15"' >>/etc/openvpn/server.conf
 		fi
 		if [[ $CLIENT_IPV6 == 'y' ]]; then
-			echo 'push "dhcp-option DNS 2a10:50c0::ad1:ff"' >>/etc/openvpn/server/server.conf
-			echo 'push "dhcp-option DNS 2a10:50c0::ad2:ff"' >>/etc/openvpn/server/server.conf
+			echo 'push "dhcp-option DNS 2a10:50c0::ad1:ff"' >>/etc/openvpn/server.conf
+			echo 'push "dhcp-option DNS 2a10:50c0::ad2:ff"' >>/etc/openvpn/server.conf
 		fi
 		;;
 	nextdns)
 		if [[ $CLIENT_IPV4 == 'y' ]]; then
-			echo 'push "dhcp-option DNS 45.90.28.167"' >>/etc/openvpn/server/server.conf
-			echo 'push "dhcp-option DNS 45.90.30.167"' >>/etc/openvpn/server/server.conf
+			echo 'push "dhcp-option DNS 45.90.28.167"' >>/etc/openvpn/server.conf
+			echo 'push "dhcp-option DNS 45.90.30.167"' >>/etc/openvpn/server.conf
 		fi
 		if [[ $CLIENT_IPV6 == 'y' ]]; then
-			echo 'push "dhcp-option DNS 2a07:a8c0::"' >>/etc/openvpn/server/server.conf
-			echo 'push "dhcp-option DNS 2a07:a8c1::"' >>/etc/openvpn/server/server.conf
+			echo 'push "dhcp-option DNS 2a07:a8c0::"' >>/etc/openvpn/server.conf
+			echo 'push "dhcp-option DNS 2a07:a8c1::"' >>/etc/openvpn/server.conf
 		fi
 		;;
 	custom)
-		echo "push \"dhcp-option DNS $DNS1\"" >>/etc/openvpn/server/server.conf
+		echo "push \"dhcp-option DNS $DNS1\"" >>/etc/openvpn/server.conf
 		if [[ $DNS2 != "" ]]; then
-			echo "push \"dhcp-option DNS $DNS2\"" >>/etc/openvpn/server/server.conf
+			echo "push \"dhcp-option DNS $DNS2\"" >>/etc/openvpn/server.conf
 		fi
 		;;
 	esac
 
-	# Redirect gateway settings - always redirect both IPv4 and IPv6 to prevent leaks
-	# For IPv4: redirect-gateway def1 routes all IPv4 through VPN (or drops it if IPv4 not configured)
-	# For IPv6: route-ipv6 + redirect-gateway ipv6 routes all IPv6, or block-ipv6 drops it
-	echo 'push "redirect-gateway def1 bypass-dhcp"' >>/etc/openvpn/server/server.conf
+	# Do NOT set VPN as default gateway (split tunnel): only traffic to VPN subnet and PUSH_ROUTES go through the tunnel.
+	# This avoids making the VPN the exit node and prevents issues with local network / internet access.
+	# IPv4: no redirect-gateway - client keeps local default route.
 	if [[ $CLIENT_IPV6 == "y" ]]; then
-		echo 'push "route-ipv6 2000::/3"' >>/etc/openvpn/server/server.conf
-		echo 'push "redirect-gateway ipv6"' >>/etc/openvpn/server/server.conf
+		# IPv6: no redirect-gateway - client keeps local IPv6 default route.
+		:
 	else
 		# Block IPv6 on clients to prevent IPv6 leaks when VPN only handles IPv4
-		echo 'push "block-ipv6"' >>/etc/openvpn/server/server.conf
+		echo 'push "block-ipv6"' >>/etc/openvpn/server.conf
 	fi
 
+	# Push custom routes (走 VPN 的网段) so only these subnets go through the VPN
+	echo '# PUSH_ROUTES_START' >>/etc/openvpn/server.conf
+	PUSH_ROUTES_FILE="/etc/openvpn/push-routes"
+	: >"$PUSH_ROUTES_FILE"
+	if [[ -n $PUSH_ROUTES ]]; then
+		IFS=',' read -ra ROUTES <<< "$PUSH_ROUTES"
+		for r in "${ROUTES[@]}"; do
+			r=$(echo "$r" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+			[[ -z $r ]] && continue
+			parsed=$(parse_push_route_ipv4 "$r")
+			if [[ -n $parsed ]]; then
+				echo "push \"route $parsed\"" >>/etc/openvpn/server.conf
+				echo "$parsed" >>"$PUSH_ROUTES_FILE"
+			fi
+		done
+	fi
+	echo '# PUSH_ROUTES_END' >>/etc/openvpn/server.conf
+
+	# Push performance options to clients (PERF_OPT 1/3 推送；2=高性能不推送，与精简备份一致)
+	echo '# PERF_PUSH_START' >>/etc/openvpn/server.conf
+	case "${PERF_OPT:-2}" in
+	1)
+		echo 'push "sndbuf 0"' >>/etc/openvpn/server.conf
+		echo 'push "rcvbuf 0"' >>/etc/openvpn/server.conf
+		echo 'push "allow-compression no"' >>/etc/openvpn/server.conf
+		echo 'push "mssfix 1400"' >>/etc/openvpn/server.conf
+		;;
+	2) ;;
+	3)
+		echo 'push "compress lz4-v2"' >>/etc/openvpn/server.conf
+		echo 'push "sndbuf 0"' >>/etc/openvpn/server.conf
+		echo 'push "rcvbuf 0"' >>/etc/openvpn.server.conf
+		echo 'push "mssfix 1400"' >>/etc/openvpn.server.conf
+		;;
+	4) ;;
+	esac
+	echo '# PERF_PUSH_END' >>/etc/openvpn/server.conf
+
 	if [[ -n $MTU ]]; then
-		echo "tun-mtu $MTU" >>/etc/openvpn/server/server.conf
+		echo "tun-mtu $MTU" >>/etc/openvpn/server.conf
 	fi
 
 	# Use ECDH key exchange (dh none) with tls-groups for curve negotiation
-	echo "dh none" >>/etc/openvpn/server/server.conf
-	echo "tls-groups $TLS_GROUPS" >>/etc/openvpn/server/server.conf
+	echo "dh none" >>/etc/openvpn/server.conf
+	echo "tls-groups $TLS_GROUPS" >>/etc/openvpn/server.conf
 
 	case $TLS_SIG in
 	crypt-v2)
-		echo "tls-crypt-v2 tls-crypt-v2.key" >>/etc/openvpn/server/server.conf
+		echo "tls-crypt-v2 tls-crypt-v2.key" >>/etc/openvpn/server.conf
 		;;
 	crypt)
-		echo "tls-crypt tls-crypt.key" >>/etc/openvpn/server/server.conf
+		echo "tls-crypt tls-crypt.key" >>/etc/openvpn/server.conf
 		;;
 	auth)
-		echo "tls-auth tls-auth.key 0" >>/etc/openvpn/server/server.conf
+		echo "tls-auth tls-auth.key 0" >>/etc/openvpn/server.conf
 		;;
 	esac
 
 	# Common server config options
 	# PKI mode adds crl-verify, ca, and remote-cert-tls
 	# Fingerprint mode: <peer-fingerprint> block is added when first client is created
+	# PERF_OPT 2 = 高性能：仅 cipher+ncp-ciphers+tls-cipher（无 data-ciphers/tls-ciphersuites），无 PERF 块，与精简备份一致
 	{
 		[[ $AUTH_MODE == "pki" ]] && echo "crl-verify crl.pem
 ca ca.crt"
 		echo "cert $SERVER_NAME.crt
 key $SERVER_NAME.key
 auth $HMAC_ALG
-cipher $CIPHER
-ignore-unknown-option data-ciphers
+cipher $CIPHER"
+		case "${PERF_OPT:-2}" in
+		2)
+			echo "ncp-ciphers $CIPHER
+tls-server
+tls-version-min $TLS_VERSION_MIN
+tls-cipher $CC_CIPHER"
+			;;
+		*)
+			echo "ignore-unknown-option data-ciphers
 data-ciphers $CIPHER
 ncp-ciphers $CIPHER
 tls-server
-tls-version-min $TLS_VERSION_MIN"
+tls-version-min $TLS_VERSION_MIN
+tls-cipher $CC_CIPHER
+tls-ciphersuites $TLS13_CIPHERSUITES"
+			;;
+		esac
 		[[ $AUTH_MODE == "pki" ]] && echo "remote-cert-tls client"
-		echo "tls-cipher $CC_CIPHER
-tls-ciphersuites $TLS13_CIPHERSUITES
-client-config-dir ccd
+		echo "client-config-dir ccd
 status /var/log/openvpn/status.log
 management /var/run/openvpn-server/server.sock unix
-verb 3"
-	} >>/etc/openvpn/server/server.conf
+verb 3
+# PERF_SERVER_START"
+		# Performance options (PERF_OPT: 1=default 2=high 3=low 4=off). 2=高性能：不加 sndbuf/rcvbuf/mssfix，与精简备份一致
+		case "${PERF_OPT:-2}" in
+		1)
+			echo "# Performance: OS buffers, no compression, mssfix
+sndbuf 0
+rcvbuf 0
+allow-compression no
+mssfix 1400"
+			;;
+		2) ;;
+		3)
+			echo "# Performance: lz4 compression for low bandwidth
+sndbuf 0
+rcvbuf 0
+compress lz4-v2
+mssfix 1400"
+			;;
+		4) ;;
+		esac
+		echo "# PERF_SERVER_END"
+	} >>/etc/openvpn/server.conf
+	# Store PERF_OPT for later "modify performance" feature
+	echo "${PERF_OPT:-2}" >/etc/openvpn/perf-opt
 
 	# Create client-config-dir dir
-	run_cmd_fatal "Creating client config directory" mkdir -p /etc/openvpn/server/ccd
+	run_cmd_fatal "Creating client config directory" mkdir -p /etc/openvpn/ccd
 	# Create log dir
 	run_cmd_fatal "Creating log directory" mkdir -p /var/log/openvpn
 
@@ -3063,12 +3305,12 @@ verb 3"
 	# set ownership so OpenVPN can read config/certs and write to log directory
 	if [[ $OPENVPN_USER != "nobody" ]]; then
 		log_info "Setting ownership for OpenVPN user..."
-		chown -R "$OPENVPN_USER:$OPENVPN_GROUP" /etc/openvpn/server
+		chown -R "$OPENVPN_USER:$OPENVPN_GROUP" /etc/openvpn
 		chown "$OPENVPN_USER:$OPENVPN_GROUP" /var/log/openvpn
 	fi
 
 	# Enable routing
-	log_info "Enabling IP forwarding..."
+	log_info "正在启用 IP 转发..."
 	run_cmd_fatal "Creating sysctl.d directory" mkdir -p /etc/sysctl.d
 
 	# Enable IPv4 forwarding if clients get IPv4
@@ -3095,50 +3337,42 @@ verb 3"
 		fi
 	fi
 
-	# Finally, restart and enable OpenVPN
-	# OpenVPN 2.4+ uses openvpn-server@.service with config in /etc/openvpn/server/
-	log_info "Configuring OpenVPN service..."
+	# Finally, restart and enable OpenVPN（经典布局：/etc/openvpn/server.conf）
+	log_info "正在配置 OpenVPN 服务..."
 
-	# Find the service file (location and name vary by distro)
-	# Modern distros: openvpn-server@.service in /usr/lib/systemd/system/ or /lib/systemd/system/
-	# openSUSE: openvpn@.service (old-style) that we need to adapt
-	if [[ -f /usr/lib/systemd/system/openvpn-server@.service ]]; then
-		SERVICE_SOURCE="/usr/lib/systemd/system/openvpn-server@.service"
-	elif [[ -f /lib/systemd/system/openvpn-server@.service ]]; then
-		SERVICE_SOURCE="/lib/systemd/system/openvpn-server@.service"
-	elif [[ -f /usr/lib/systemd/system/openvpn@.service ]]; then
-		# openSUSE uses old-style service, we'll create our own openvpn-server@.service
+	# 本脚本统一使用 openvpn-server@server。先停止并禁用旧名 openvpn@server（若存在），再启用新名
+	run_cmd "禁用 openvpn@server（若存在）" systemctl disable openvpn@server 2>/dev/null || true
+	run_cmd "停止 openvpn@server（若存在）" systemctl stop openvpn@server 2>/dev/null || true
+
+	# 优先使用 openvpn@.service 作为模板（Type=notify、WorkingDirectory=/etc/openvpn、--config /etc/openvpn/%i.conf 形式，性能更好），复制为 openvpn-server@.service 后仅做必要修补
+	if [[ -f /usr/lib/systemd/system/openvpn@.service ]]; then
 		SERVICE_SOURCE="/usr/lib/systemd/system/openvpn@.service"
 	elif [[ -f /lib/systemd/system/openvpn@.service ]]; then
 		SERVICE_SOURCE="/lib/systemd/system/openvpn@.service"
+	elif [[ -f /etc/systemd/system/openvpn@.service ]]; then
+		SERVICE_SOURCE="/etc/systemd/system/openvpn@.service"
+	elif [[ -f /usr/lib/systemd/system/openvpn-server@.service ]]; then
+		SERVICE_SOURCE="/usr/lib/systemd/system/openvpn-server@.service"
+	elif [[ -f /lib/systemd/system/openvpn-server@.service ]]; then
+		SERVICE_SOURCE="/lib/systemd/system/openvpn-server@.service"
 	else
-		log_fatal "Could not find openvpn-server@.service or openvpn@.service file"
+		log_fatal "未找到 openvpn@.service 或 openvpn-server@.service，无法创建服务。"
 	fi
 
-	# Don't modify package-provided service, copy to /etc/systemd/system/
-	run_cmd_fatal "Copying OpenVPN service file" cp "$SERVICE_SOURCE" /etc/systemd/system/openvpn-server@.service
-
-	# Workaround to fix OpenVPN service on OpenVZ
-	run_cmd "Patching service file (LimitNPROC)" sed -i 's|LimitNPROC|#LimitNPROC|' /etc/systemd/system/openvpn-server@.service
-
-	# Ensure the service uses /etc/openvpn/server/ as working directory
-	# This is needed for openSUSE which uses old-style paths by default
-	if grep -q "cd /etc/openvpn/" /etc/systemd/system/openvpn-server@.service; then
-		run_cmd "Patching service file (paths)" sed -i 's|/etc/openvpn/|/etc/openvpn/server/|g' /etc/systemd/system/openvpn-server@.service
+	run_cmd_fatal "复制并创建 openvpn-server@.service" cp "$SERVICE_SOURCE" /etc/systemd/system/openvpn-server@.service
+	# 仅做必要修补，保留 Type=notify、ExecStart 等原样
+	grep -q "LimitNPROC" /etc/systemd/system/openvpn-server@.service && run_cmd "修补服务文件 (LimitNPROC)" sed -i 's|LimitNPROC|#LimitNPROC|' /etc/systemd/system/openvpn-server@.service
+	grep -q "/etc/openvpn/server" /etc/systemd/system/openvpn-server@.service && run_cmd "修补服务文件 (经典布局路径)" sed -i 's|/etc/openvpn/server|/etc/openvpn|g' /etc/systemd/system/openvpn-server@.service
+	if grep -q "WorkingDirectory=" /etc/systemd/system/openvpn-server@.service; then
+		run_cmd "修补服务文件 (WorkingDirectory)" sed -i 's|^WorkingDirectory=.*|WorkingDirectory=/etc/openvpn|' /etc/systemd/system/openvpn-server@.service
+	else
+		run_cmd "修补服务文件 (添加 WorkingDirectory)" sed -i '/\[Service\]/a WorkingDirectory=/etc/openvpn' /etc/systemd/system/openvpn-server@.service
 	fi
 
-	# Ensure RuntimeDirectory is set for the management socket
-	# Some distros (e.g., openSUSE) don't include this in their service file
-	if ! grep -q "RuntimeDirectory=" /etc/systemd/system/openvpn-server@.service; then
-		run_cmd "Patching service file (RuntimeDirectory)" sed -i '/\[Service\]/a RuntimeDirectory=openvpn-server' /etc/systemd/system/openvpn-server@.service
-	fi
-
-	run_cmd "Reloading systemd" systemctl daemon-reload
-	run_cmd "Enabling OpenVPN service" systemctl enable openvpn-server@server
-	# In fingerprint mode, delay service start until first client is created
-	# (OpenVPN requires at least one fingerprint or a CA to start)
+	run_cmd "重载 systemd" systemctl daemon-reload
+	run_cmd "启用 OpenVPN 服务" systemctl enable openvpn-server@server
 	if [[ $AUTH_MODE == "pki" ]]; then
-		run_cmd "Starting OpenVPN service" systemctl restart openvpn-server@server
+		run_cmd "启动 OpenVPN 服务" systemctl restart "$(getOpenVPNServiceUnit)"
 	fi
 
 	if [[ $DNS == "unbound" ]]; then
@@ -3147,7 +3381,7 @@ verb 3"
 
 	# Configure firewall rules
 	# Use source-based rules for VPN traffic (works reliably regardless of which tun interface OpenVPN uses)
-	log_info "Configuring firewall rules..."
+	log_info "正在配置防火墙规则..."
 
 	if systemctl is-active --quiet firewalld; then
 		# Use firewalld native commands for systems with firewalld active
@@ -3305,22 +3539,23 @@ WantedBy=multi-user.target" >/etc/systemd/system/iptables-openvpn.service
 	fi
 
 	# client-template.txt is created so we have a template to add further users later
-	log_info "Creating client template..."
-	echo "client" >/etc/openvpn/server/client-template.txt
+	log_info "正在创建客户端模板..."
+	echo "client" >/etc/openvpn/client-template.txt
 	if [[ $PROTOCOL == 'udp' ]]; then
-		echo "proto udp" >>/etc/openvpn/server/client-template.txt
-		echo "explicit-exit-notify" >>/etc/openvpn/server/client-template.txt
+		echo "proto udp" >>/etc/openvpn/client-template.txt
+		echo "explicit-exit-notify" >>/etc/openvpn/client-template.txt
 	elif [[ $PROTOCOL == 'udp6' ]]; then
-		echo "proto udp6" >>/etc/openvpn/server/client-template.txt
-		echo "explicit-exit-notify" >>/etc/openvpn/server/client-template.txt
+		echo "proto udp6" >>/etc/openvpn/client-template.txt
+		echo "explicit-exit-notify" >>/etc/openvpn/client-template.txt
 	elif [[ $PROTOCOL == 'tcp' ]]; then
-		echo "proto tcp-client" >>/etc/openvpn/server/client-template.txt
+		echo "proto tcp-client" >>/etc/openvpn/client-template.txt
 	elif [[ $PROTOCOL == 'tcp6' ]]; then
-		echo "proto tcp6-client" >>/etc/openvpn/server/client-template.txt
+		echo "proto tcp6-client" >>/etc/openvpn/client-template.txt
 	fi
 	# Common client template options
 	# PKI mode adds remote-cert-tls and verify-x509-name
 	# Fingerprint mode adds peer-fingerprint when generating client config
+	# PERF_OPT 2 = 高性能客户端：仅 cipher+tls-cipher、route+route-nopull，无 data-ciphers/ncp-ciphers/tls-ciphersuites 与 sndbuf/rcvbuf/mssfix
 	{
 		echo "remote $IP $PORT
 dev tun
@@ -3332,21 +3567,60 @@ persist-tun"
 verify-x509-name $SERVER_NAME name"
 		echo "auth $HMAC_ALG
 auth-nocache
-cipher $CIPHER
-ignore-unknown-option data-ciphers
+cipher $CIPHER"
+		case "${PERF_OPT:-2}" in
+		2)
+			# 高性能：仅 cipher + tls-cipher，不加 data-ciphers/ncp-ciphers/tls-ciphersuites
+			echo "tls-client
+tls-version-min $TLS_VERSION_MIN
+tls-cipher $CC_CIPHER"
+			;;
+		*)
+			echo "ignore-unknown-option data-ciphers
 data-ciphers $CIPHER
 ncp-ciphers $CIPHER
 tls-client
 tls-version-min $TLS_VERSION_MIN
 tls-cipher $CC_CIPHER
-tls-ciphersuites $TLS13_CIPHERSUITES
-ignore-unknown-option block-outside-dns
+tls-ciphersuites $TLS13_CIPHERSUITES"
+			;;
+		esac
+		echo "ignore-unknown-option block-outside-dns
 setenv opt block-outside-dns # Prevent Windows 10 DNS leak
-verb 3"
-	} >>/etc/openvpn/server/client-template.txt
+verb 3
+# PERF_CLIENT_START"
+		# Performance options in client template (PERF_OPT 1=default 2=high 3=low 4=off)
+		case "${PERF_OPT:-2}" in
+		2)
+			# 高性能：仅 split tunnel（route + pull-filter + route-nopull），不加 sndbuf/rcvbuf/mssfix
+			if [[ -n $PUSH_ROUTES ]]; then
+				IFS=',' read -ra ROUTES <<< "$PUSH_ROUTES"
+				for r in "${ROUTES[@]}"; do
+					r=$(echo "$r" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+					[[ -z $r ]] && continue
+					parsed=$(parse_push_route_ipv4 "$r")
+					[[ -n $parsed ]] && echo "route $parsed"
+				done
+			fi
+			echo "pull-filter ignore \"redirect-gateway\"
+route-nopull"
+			;;
+		1|3)
+			echo "# Performance: ignore redirect-gateway (split tunnel); buffers; mssfix
+pull-filter ignore \"redirect-gateway\"
+sndbuf 0
+rcvbuf 0
+mssfix 1400"
+			;;
+		4)
+			echo "pull-filter ignore \"redirect-gateway\""
+			;;
+		esac
+		echo "# PERF_CLIENT_END"
+	} >>/etc/openvpn/client-template.txt
 
 	if [[ -n $MTU ]]; then
-		echo "tun-mtu $MTU" >>/etc/openvpn/server/client-template.txt
+		echo "tun-mtu $MTU" >>/etc/openvpn/client-template.txt
 	fi
 
 	# Generate the custom client.ovpn
@@ -3357,13 +3631,33 @@ verb 3"
 			log_info "No clients added. To add clients, simply run the script again."
 		fi
 	else
-		log_info "Generating first client certificate..."
+		# 默认安装为首个客户端生成随机密码（未指定时），安装完成后显示
+		if [[ $PASS == "2" ]] && [[ -z "${PASSPHRASE:-}" ]]; then
+			PASSPHRASE=$(openssl rand -hex 12)
+			INSTALL_GENERATED_PASSPHRASE=1
+		fi
+		log_info "正在生成首个客户端证书..."
 		newClient
 		# In fingerprint mode, start service now that we have at least one fingerprint
 		if [[ $AUTH_MODE == "fingerprint" ]]; then
-			run_cmd "Starting OpenVPN service" systemctl restart openvpn-server@server
+			run_cmd "Starting OpenVPN service" systemctl restart "$(getOpenVPNServiceUnit)"
 		fi
-		log_success "If you want to add more clients, you simply need to run this script another time!"
+		log_success "如需添加更多客户端，请再次运行本脚本。"
+		if [[ -n "${INSTALL_GENERATED_PASSPHRASE:-}" ]] && [[ $PASS == "2" ]] && [[ -n "${PASSPHRASE:-}" ]]; then
+			if [[ $OUTPUT_FORMAT != "json" ]]; then
+				echo ""
+				echo -e "${COLOR_BOLD}${COLOR_GREEN}----------------------------------------${COLOR_RESET}"
+				echo -e "${COLOR_BOLD}  首个客户端私钥密码（请妥善保存）${COLOR_RESET}"
+				echo -e "${COLOR_BOLD}${COLOR_GREEN}----------------------------------------${COLOR_RESET}"
+				echo ""
+				echo -e "  客户端名称: ${COLOR_BOLD}$CLIENT${COLOR_RESET}"
+				echo -e "  私钥密码:   ${COLOR_BOLD}${COLOR_GREEN}$PASSPHRASE${COLOR_RESET}"
+				echo ""
+				echo -e "  ${COLOR_DIM}导入 .ovpn 或连接 VPN 时需输入此密码。${COLOR_RESET}"
+				echo ""
+			fi
+			_log_to_file "首个客户端 $CLIENT 已使用自动生成的私钥密码（已向用户显示）"
+		fi
 	fi
 }
 
@@ -3446,9 +3740,9 @@ function writeClientConfig() {
 function regenerateCRL() {
 	export EASYRSA_CRL_DAYS=$DEFAULT_CRL_VALIDITY_DURATION_DAYS
 	run_cmd_fatal "Regenerating CRL" ./easyrsa gen-crl
-	run_cmd "Removing old CRL" rm -f /etc/openvpn/server/crl.pem
-	run_cmd_fatal "Copying new CRL" cp /etc/openvpn/server/easy-rsa/pki/crl.pem /etc/openvpn/server/crl.pem
-	run_cmd "Setting CRL permissions" chmod 644 /etc/openvpn/server/crl.pem
+	run_cmd "Removing old CRL" rm -f /etc/openvpn/crl.pem
+	run_cmd_fatal "Copying new CRL" cp /etc/openvpn/easy-rsa/pki/crl.pem /etc/openvpn/crl.pem
+	run_cmd "Setting CRL permissions" chmod 644 /etc/openvpn/crl.pem
 }
 
 # Helper function to generate .ovpn client config file
@@ -3459,36 +3753,36 @@ function generateClientConfig() {
 
 	# Read auth mode
 	local auth_mode="pki"
-	if [[ -f /etc/openvpn/server/easy-rsa/AUTH_MODE_GENERATED ]]; then
-		auth_mode=$(cat /etc/openvpn/server/easy-rsa/AUTH_MODE_GENERATED)
+	if [[ -f /etc/openvpn/easy-rsa/AUTH_MODE_GENERATED ]]; then
+		auth_mode=$(cat /etc/openvpn/easy-rsa/AUTH_MODE_GENERATED)
 	fi
 
 	# Determine if we use tls-crypt-v2, tls-crypt, or tls-auth
 	local tls_sig=""
-	if grep -qs "^tls-crypt-v2" /etc/openvpn/server/server.conf; then
+	if grep -qs "^tls-crypt-v2" /etc/openvpn/server.conf; then
 		tls_sig="1"
-	elif grep -qs "^tls-crypt" /etc/openvpn/server/server.conf; then
+	elif grep -qs "^tls-crypt" /etc/openvpn/server.conf; then
 		tls_sig="2"
-	elif grep -qs "^tls-auth" /etc/openvpn/server/server.conf; then
+	elif grep -qs "^tls-auth" /etc/openvpn/server.conf; then
 		tls_sig="3"
 	fi
 
 	# Generate the custom client.ovpn
-	run_cmd "Creating client config" cp /etc/openvpn/server/client-template.txt "$filepath"
+	run_cmd "Creating client config" cp /etc/openvpn/client-template.txt "$filepath"
 	{
 		if [[ $auth_mode == "pki" ]]; then
 			# PKI mode: include CA certificate
 			echo "<ca>"
-			cat "/etc/openvpn/server/easy-rsa/pki/ca.crt"
+			cat "/etc/openvpn/easy-rsa/pki/ca.crt"
 			echo "</ca>"
 		else
 			# Fingerprint mode: use server fingerprint instead of CA
 			local server_fingerprint
-			if [[ ! -f /etc/openvpn/server/server-fingerprint ]]; then
+			if [[ ! -f /etc/openvpn/server-fingerprint ]]; then
 				log_error "Server fingerprint file not found"
 				exit 1
 			fi
-			server_fingerprint=$(cat /etc/openvpn/server/server-fingerprint)
+			server_fingerprint=$(cat /etc/openvpn/server-fingerprint)
 			if [[ -z $server_fingerprint ]]; then
 				log_error "Server fingerprint is empty"
 				exit 1
@@ -3497,23 +3791,30 @@ function generateClientConfig() {
 		fi
 
 		echo "<cert>"
-		awk '/BEGIN/,/END CERTIFICATE/' "/etc/openvpn/server/easy-rsa/pki/issued/$client.crt"
+		awk '/BEGIN/,/END CERTIFICATE/' "/etc/openvpn/easy-rsa/pki/issued/$client.crt"
 		echo "</cert>"
 
 		echo "<key>"
-		cat "/etc/openvpn/server/easy-rsa/pki/private/$client.key"
+		cat "/etc/openvpn/easy-rsa/pki/private/$client.key"
 		echo "</key>"
+
+		# 高性能客户端（模板含 route-nopull）：在 key 与 tls 块之间追加 route NET NETMASK vpn_gateway
+		if grep -q "route-nopull" /etc/openvpn/client-template.txt 2>/dev/null && [[ -f /etc/openvpn/push-routes ]] && [[ -s /etc/openvpn/push-routes ]]; then
+			while IFS= read -r line; do
+				[[ -n $line ]] && echo "route $line vpn_gateway"
+			done </etc/openvpn/push-routes
+		fi
 
 		case $tls_sig in
 		1)
-			# Generate per-client tls-crypt-v2 key in /etc/openvpn/server/
+			# Generate per-client tls-crypt-v2 key in /etc/openvpn/
 			# Using /tmp would fail on Ubuntu 25.04+ due to AppArmor restrictions
-			tls_crypt_v2_tmpfile=$(mktemp /etc/openvpn/server/tls-crypt-v2-client.XXXXXX)
+			tls_crypt_v2_tmpfile=$(mktemp /etc/openvpn/tls-crypt-v2-client.XXXXXX)
 			if [[ -z "$tls_crypt_v2_tmpfile" ]] || [[ ! -f "$tls_crypt_v2_tmpfile" ]]; then
 				log_error "Failed to create temporary file for tls-crypt-v2 client key"
 				exit 1
 			fi
-			if ! openvpn --tls-crypt-v2 /etc/openvpn/server/tls-crypt-v2.key \
+			if ! openvpn --tls-crypt-v2 /etc/openvpn/tls-crypt-v2.key \
 				--genkey tls-crypt-v2-client "$tls_crypt_v2_tmpfile"; then
 				rm -f "$tls_crypt_v2_tmpfile"
 				log_error "Failed to generate tls-crypt-v2 client key"
@@ -3526,13 +3827,13 @@ function generateClientConfig() {
 			;;
 		2)
 			echo "<tls-crypt>"
-			cat /etc/openvpn/server/tls-crypt.key
+			cat /etc/openvpn/tls-crypt.key
 			echo "</tls-crypt>"
 			;;
 		3)
 			echo "key-direction 1"
 			echo "<tls-auth>"
-			cat /etc/openvpn/server/tls-auth.key
+			cat /etc/openvpn/tls-auth.key
 			echo "</tls-auth>"
 			;;
 		esac
@@ -3542,8 +3843,8 @@ function generateClientConfig() {
 # Helper function to get the current auth mode
 # Returns: "pki" or "fingerprint"
 function getAuthMode() {
-	if [[ -f /etc/openvpn/server/easy-rsa/AUTH_MODE_GENERATED ]]; then
-		cat /etc/openvpn/server/easy-rsa/AUTH_MODE_GENERATED
+	if [[ -f /etc/openvpn/easy-rsa/AUTH_MODE_GENERATED ]]; then
+		cat /etc/openvpn/easy-rsa/AUTH_MODE_GENERATED
 	else
 		echo "pki"
 	fi
@@ -3558,7 +3859,7 @@ function getAuthMode() {
 #   </peer-fingerprint>
 # Returns: newline-separated list of client names
 function getClientsFromFingerprints() {
-	local server_conf="/etc/openvpn/server/server.conf"
+	local server_conf="/etc/openvpn/server.conf"
 	if [[ ! -f "$server_conf" ]]; then
 		return
 	fi
@@ -3637,12 +3938,12 @@ function selectClient() {
 		NUMBEROFCLIENTS=$(echo "$clients_list" | grep -c . || echo 0)
 	else
 		# PKI mode: get valid clients from index.txt
-		clients_list=$(tail -n +2 /etc/openvpn/server/easy-rsa/pki/index.txt 2>/dev/null | grep "^V" | cut -d '=' -f 2)
+		clients_list=$(tail -n +2 /etc/openvpn/easy-rsa/pki/index.txt 2>/dev/null | grep "^V" | cut -d '=' -f 2)
 		NUMBEROFCLIENTS=$(echo "$clients_list" | grep -c . || echo 0)
 	fi
 
 	if [[ $NUMBEROFCLIENTS == '0' ]]; then
-		log_fatal "You have no existing clients!"
+		log_fatal "当前没有任何客户端！"
 	fi
 
 	# If CLIENT is set, validate it exists as a valid client
@@ -3650,7 +3951,7 @@ function selectClient() {
 		if echo "$clients_list" | grep -qx "$CLIENT"; then
 			return
 		else
-			log_fatal "Client '$CLIENT' not found or not valid"
+			log_fatal "未找到或无效的客户端: '$CLIENT'"
 		fi
 	fi
 
@@ -3658,7 +3959,7 @@ function selectClient() {
 	if [[ $show_expiry == "true" ]]; then
 		local i=1
 		while read -r client; do
-			local client_cert="/etc/openvpn/server/easy-rsa/pki/issued/$client.crt"
+			local client_cert="/etc/openvpn/easy-rsa/pki/issued/$client.crt"
 			local days
 			days=$(getDaysUntilExpiry "$client_cert")
 			local expiry
@@ -3673,9 +3974,9 @@ function selectClient() {
 	# Prompt for selection
 	until [[ ${CLIENTNUMBER:-$client_number} -ge 1 && ${CLIENTNUMBER:-$client_number} -le $NUMBEROFCLIENTS ]]; do
 		if [[ $NUMBEROFCLIENTS == '1' ]]; then
-			read -rp "Select one client [1]: " client_number
+			read -rp "请选择客户端 [1]: " client_number
 		else
-			read -rp "Select one client [1-$NUMBEROFCLIENTS]: " client_number
+			read -rp "请选择客户端 [1-$NUMBEROFCLIENTS]: " client_number
 		fi
 	done
 	CLIENTNUMBER="${CLIENTNUMBER:-$client_number}"
@@ -3695,8 +3996,8 @@ function json_escape() {
 }
 
 function listClients() {
-	local index_file="/etc/openvpn/server/easy-rsa/pki/index.txt"
-	local cert_dir="/etc/openvpn/server/easy-rsa/pki/issued"
+	local index_file="/etc/openvpn/easy-rsa/pki/index.txt"
+	local cert_dir="/etc/openvpn/easy-rsa/pki/issued"
 	local number_of_clients
 	local format="${OUTPUT_FORMAT:-table}"
 	local auth_mode
@@ -3730,7 +4031,7 @@ function listClients() {
 			if [[ $format == "json" ]]; then
 				echo '{"clients":[]}'
 			else
-				log_warn "You have no existing client certificates!"
+				log_warn "当前没有任何客户端证书！"
 			fi
 			return
 		fi
@@ -3757,7 +4058,7 @@ function listClients() {
 			if [[ $format == "json" ]]; then
 				echo '{"clients":[]}'
 			else
-				log_warn "You have no existing client certificates!"
+				log_warn "当前没有任何客户端证书！"
 			fi
 			return
 		fi
@@ -3802,25 +4103,25 @@ function listClients() {
 		echo ']}'
 	else
 		# Output table
-		log_header "Client Certificates"
-		log_info "Found $number_of_clients client certificate(s)"
+		log_header "客户端证书"
+		log_info "共 $number_of_clients 个客户端证书"
 		log_menu ""
-		printf "   %-25s %-10s %-12s %s\n" "Name" "Status" "Expiry" "Remaining"
+		printf "   %-25s %-10s %-12s %s\n" "名称" "状态" "到期日" "剩余"
 		printf "   %-25s %-10s %-12s %s\n" "----" "------" "------" "---------"
 
 		for client_entry in "${clients_data[@]}"; do
 			IFS='|' read -r name status expiry days <<<"$client_entry"
 			local relative
 			if [[ $days == "null" ]]; then
-				relative="unknown"
+				relative="未知"
 			elif [[ $days -lt 0 ]]; then
-				relative="$((-days)) days ago"
+				relative="$((-days)) 天前"
 			elif [[ $days -eq 0 ]]; then
-				relative="today"
+				relative="今天"
 			elif [[ $days -eq 1 ]]; then
-				relative="1 day"
+				relative="1 天"
 			else
-				relative="$days days"
+				relative="$days 天"
 			fi
 			# Capitalize status for table display
 			local status_display="${status^}"
@@ -3856,8 +4157,8 @@ function listConnectedClients() {
 		if [[ $format == "json" ]]; then
 			echo '{"error":"Status file not found","clients":[]}'
 		else
-			log_warn "Status file not found: $status_file"
-			log_info "Make sure OpenVPN is running."
+			log_warn "未找到状态文件: $status_file"
+			log_info "请确认 OpenVPN 服务已运行。"
 		fi
 		return
 	fi
@@ -3869,9 +4170,9 @@ function listConnectedClients() {
 		if [[ $format == "json" ]]; then
 			echo '{"clients":[]}'
 		else
-			log_header "Connected Clients"
-			log_info "No clients currently connected."
-			log_info "Note: Data refreshes every 60 seconds."
+			log_header "已连接客户端"
+			log_info "当前没有客户端连接。"
+			log_info "说明：数据每 60 秒刷新一次。"
 		fi
 		return
 	fi
@@ -3894,10 +4195,10 @@ function listConnectedClients() {
 		done
 		echo ']}'
 	else
-		log_header "Connected Clients"
-		log_info "Found $client_count connected client(s)"
+		log_header "已连接客户端"
+		log_info "当前共 $client_count 个客户端连接"
 		log_menu ""
-		printf "   %-20s %-22s %-16s %-20s %s\n" "Name" "Real Address" "VPN IP" "Connected Since" "Transfer"
+		printf "   %-20s %-22s %-16s %-20s %s\n" "名称" "真实地址" "VPN IP" "连接时间" "流量"
 		printf "   %-20s %-22s %-16s %-20s %s\n" "----" "------------" "------" "---------------" "--------"
 
 		for client_entry in "${clients_data[@]}"; do
@@ -3909,44 +4210,61 @@ function listConnectedClients() {
 			printf "   %-20s %-22s %-16s %-20s %s\n" "$name" "$real_addr" "$vpn_ip" "$connected_since" "$transfer"
 		done
 		log_menu ""
-		log_info "Note: Data refreshes every 60 seconds."
+		log_info "说明：数据每 60 秒刷新一次。"
 	fi
 }
 
 function newClient() {
-	log_header "New Client Setup"
+	log_header "添加新客户端"
 
 	# Only prompt for client name if not already set or invalid
 	if ! is_valid_client_name "$CLIENT"; then
-		log_prompt "Tell me a name for the client."
-		log_prompt "The name must consist of alphanumeric characters, underscores, or dashes (max $MAX_CLIENT_NAME_LENGTH characters)."
+		log_prompt "请输入客户端名称。"
+		log_prompt "名称只能包含字母、数字、下划线或短横线（最多 $MAX_CLIENT_NAME_LENGTH 个字符）。"
 		until is_valid_client_name "$CLIENT"; do
-			read -rp "Client name: " -e CLIENT
+			read -rp "客户端名称: " -e CLIENT
 		done
 	fi
 
 	# Only prompt for cert duration if not already set
 	if [[ -z $CLIENT_CERT_DURATION_DAYS ]] || ! [[ $CLIENT_CERT_DURATION_DAYS =~ ^[0-9]+$ ]] || [[ $CLIENT_CERT_DURATION_DAYS -lt 1 ]]; then
 		log_menu ""
-		log_prompt "How many days should the client certificate be valid for?"
+		log_prompt "客户端证书有效期为多少天？"
 		until [[ $CLIENT_CERT_DURATION_DAYS =~ ^[0-9]+$ ]] && [[ $CLIENT_CERT_DURATION_DAYS -ge 1 ]]; do
-			read -rp "Certificate validity (days): " -e -i $DEFAULT_CERT_VALIDITY_DURATION_DAYS CLIENT_CERT_DURATION_DAYS
+			read -rp "证书有效期（天）: " -e -i $DEFAULT_CERT_VALIDITY_DURATION_DAYS CLIENT_CERT_DURATION_DAYS
 		done
 	fi
 
 	# Only prompt for password if not already set
 	if ! [[ $PASS =~ ^[1-2]$ ]]; then
 		log_menu ""
-		log_prompt "Do you want to protect the configuration file with a password?"
-		log_prompt "(e.g. encrypt the private key with a password)"
-		log_menu "   1) Add a passwordless client"
-		log_menu "   2) Use a password for the client"
+		log_prompt "是否为该客户端设置私钥密码？"
+		log_prompt "（设置后，导入 .ovpn 或连接 VPN 时需输入此密码）"
+		log_menu "   1) 不设置密码"
+		log_menu "   2) 设置密码"
 		until [[ $PASS =~ ^[1-2]$ ]]; do
-			read -rp "Select an option [1-2]: " -e -i 1 PASS
+			read -rp "请选择 [1-2]: " -e -i 1 PASS
 		done
 	fi
 
-	cd /etc/openvpn/server/easy-rsa/ || return
+	# When user chose to set password, prompt for it here if not already provided (e.g. via --password)
+	if [[ $PASS == "2" ]] && [[ -z "$PASSPHRASE" ]]; then
+		log_prompt "请输入客户端私钥密码（输入时不显示）："
+		read -rs PASSPHRASE
+		echo ""
+		if [[ -z "$PASSPHRASE" ]]; then
+			log_warn "未输入密码，稍后将由 easyrsa 提示输入。"
+		else
+			log_prompt "请再次输入密码以确认："
+			read -rs PASSPHRASE_CONFIRM
+			echo ""
+			if [[ "$PASSPHRASE" != "$PASSPHRASE_CONFIRM" ]]; then
+				log_fatal "两次输入的密码不一致，请重新添加客户端。"
+			fi
+		fi
+	fi
+
+	cd /etc/openvpn/easy-rsa/ || return
 
 	# Read auth mode
 	if [[ -f AUTH_MODE_GENERATED ]]; then
@@ -3965,12 +4283,12 @@ function newClient() {
 	else
 		# PKI mode: check index.txt
 		if [[ -f pki/index.txt ]]; then
-			CLIENTEXISTS=$(tail -n +2 /etc/openvpn/server/easy-rsa/pki/index.txt | grep -E "^V" | grep -c -E "/CN=$CLIENT\$")
+			CLIENTEXISTS=$(tail -n +2 /etc/openvpn/easy-rsa/pki/index.txt | grep -E "^V" | grep -c -E "/CN=$CLIENT\$")
 		fi
 	fi
 
 	if [[ $CLIENTEXISTS != '0' ]]; then
-		log_error "The specified client CN was already found, please choose another name."
+		log_error "该客户端名称已存在，请换一个名称。"
 		exit 1
 	fi
 
@@ -3980,7 +4298,7 @@ function newClient() {
 		removeCertFiles "$CLIENT"
 	fi
 
-	log_info "Generating client certificate..."
+	log_info "正在生成客户端证书..."
 	export EASYRSA_CERT_EXPIRE=$CLIENT_CERT_DURATION_DAYS
 
 	# Determine easyrsa command based on auth mode
@@ -3999,12 +4317,12 @@ function newClient() {
 		;;
 	2)
 		if [[ -z "$PASSPHRASE" ]]; then
-			log_warn "You will be asked for the client password below"
+			log_warn "请在下方输入客户端私钥密码（easyrsa 将提示两次）"
 			if ! ./easyrsa --batch "$easyrsa_cmd" "$CLIENT"; then
-				log_fatal "Building $cert_desc failed"
+				log_fatal "生成 $cert_desc 失败"
 			fi
 		else
-			log_info "Using provided passphrase for client certificate"
+			log_info "使用已提供的密码加密客户端私钥"
 			export EASYRSA_PASSPHRASE="$PASSPHRASE"
 			run_cmd_fatal "Building $cert_desc" ./easyrsa --batch --passin=env:EASYRSA_PASSPHRASE --passout=env:EASYRSA_PASSPHRASE "$easyrsa_cmd" "$CLIENT"
 			unset EASYRSA_PASSPHRASE
@@ -4023,40 +4341,40 @@ function newClient() {
 
 		# Add fingerprint to server.conf's <peer-fingerprint> block
 		# Create the block if this is the first client
-		if ! grep -q '<peer-fingerprint>' /etc/openvpn/server/server.conf; then
+		if ! grep -q '<peer-fingerprint>' /etc/openvpn/server.conf; then
 			echo "# Client fingerprints are listed below
 <peer-fingerprint>
 # $CLIENT
 $CLIENT_FINGERPRINT
-</peer-fingerprint>" >>/etc/openvpn/server/server.conf
+</peer-fingerprint>" >>/etc/openvpn/server.conf
 		else
 			# Insert comment and fingerprint before closing tag
-			sed -i "/<\/peer-fingerprint>/i # $CLIENT\n$CLIENT_FINGERPRINT" /etc/openvpn/server/server.conf
+			sed -i "/<\/peer-fingerprint>/i # $CLIENT\n$CLIENT_FINGERPRINT" /etc/openvpn/server.conf
 		fi
 
 		# Reload OpenVPN to pick up new fingerprint
 		log_info "Reloading OpenVPN to apply new fingerprint..."
-		if systemctl is-active --quiet openvpn-server@server; then
-			systemctl reload openvpn-server@server 2>/dev/null || systemctl restart openvpn-server@server
+		if systemctl is-active --quiet "$(getOpenVPNServiceUnit)"; then
+			systemctl reload "$(getOpenVPNServiceUnit)" 2>/dev/null || systemctl restart "$(getOpenVPNServiceUnit)"
 		fi
 	fi
 
-	log_success "Client $CLIENT added and is valid for $CLIENT_CERT_DURATION_DAYS days."
+	log_success "客户端 $CLIENT 已添加，证书有效期为 $CLIENT_CERT_DURATION_DAYS 天。"
 
 	# Write the .ovpn config file with proper path and permissions
 	writeClientConfig "$CLIENT"
 
+	log_info "请下载 .ovpn 文件并导入到 OpenVPN 客户端；若设置了密码，连接时需输入。"
 	log_menu ""
-	log_success "The configuration file has been written to $GENERATED_CONFIG_PATH."
-	log_info "Download the .ovpn file and import it in your OpenVPN client."
+	log_success "配置文件已写入: $GENERATED_CONFIG_PATH"
 }
 
 function revokeClient() {
-	log_header "Revoke Client"
-	log_prompt "Select the existing client certificate you want to revoke"
+	log_header "吊销客户端"
+	log_prompt "请选择要吊销的客户端证书"
 	selectClient
 
-	cd /etc/openvpn/server/easy-rsa/ || return
+	cd /etc/openvpn/easy-rsa/ || return
 
 	# Read auth mode
 	local auth_mode="pki"
@@ -4064,36 +4382,36 @@ function revokeClient() {
 		auth_mode=$(cat AUTH_MODE_GENERATED)
 	fi
 
-	log_info "Revoking certificate for $CLIENT..."
+	log_info "正在吊销客户端 $CLIENT 的证书..."
 
 	if [[ $auth_mode == "pki" ]]; then
 		# PKI mode: use Easy-RSA revocation and CRL
-		run_cmd_fatal "Revoking certificate" ./easyrsa --batch revoke-issued "$CLIENT"
+		run_cmd_fatal "吊销证书" ./easyrsa --batch revoke-issued "$CLIENT"
 		regenerateCRL
-		run_cmd "Backing up index" cp /etc/openvpn/server/easy-rsa/pki/index.txt{,.bk}
+		run_cmd "备份 index" cp /etc/openvpn/easy-rsa/pki/index.txt{,.bk}
 	else
 		# Fingerprint mode: remove fingerprint from server.conf
 		# Keep cert files so revoked clients appear in client list
-		log_info "Removing client fingerprint from server configuration..."
+		log_info "正在从服务器配置中移除该客户端指纹..."
 
 		# Remove comment line and fingerprint line below it from server.conf
-		sed -i "/^# $CLIENT\$/{N;d;}" /etc/openvpn/server/server.conf
+		sed -i "/^# $CLIENT\$/{N;d;}" /etc/openvpn/server.conf
 
 		# Reload OpenVPN to apply fingerprint removal
-		log_info "Reloading OpenVPN to apply fingerprint removal..."
-		if systemctl is-active --quiet openvpn-server@server; then
-			systemctl reload openvpn-server@server 2>/dev/null || systemctl restart openvpn-server@server
+		log_info "正在重载 OpenVPN 以应用指纹移除..."
+		if systemctl is-active --quiet "$(getOpenVPNServiceUnit)"; then
+			systemctl reload "$(getOpenVPNServiceUnit)" 2>/dev/null || systemctl restart "$(getOpenVPNServiceUnit)"
 		fi
 	fi
 
-	run_cmd "Removing client config from /home" find /home/ -maxdepth 2 -name "$CLIENT.ovpn" -delete
-	run_cmd "Removing client config from /root" rm -f "/root/$CLIENT.ovpn"
-	run_cmd "Removing IP assignment" sed -i "/^$CLIENT,.*/d" /etc/openvpn/server/ipp.txt
+	run_cmd "从 /home 删除客户端配置" find /home/ -maxdepth 2 -name "$CLIENT.ovpn" -delete
+	run_cmd "从 /root 删除客户端配置" rm -f "/root/$CLIENT.ovpn"
+	run_cmd "删除 IP 分配" sed -i "/^$CLIENT,.*/d" /etc/openvpn/ipp.txt
 
 	# Disconnect the client if currently connected
 	disconnectClient "$CLIENT"
 
-	log_success "Certificate for client $CLIENT revoked."
+	log_success "客户端 $CLIENT 的证书已吊销。"
 }
 
 # Disconnect a client via the management interface
@@ -4102,15 +4420,15 @@ function disconnectClient() {
 	local mgmt_socket="/var/run/openvpn-server/server.sock"
 
 	if [[ ! -S "$mgmt_socket" ]]; then
-		log_warn "Management socket not found. Client may still be connected until they reconnect."
+		log_warn "未找到管理套接字。客户端可能在重连前仍处于连接状态。"
 		return 0
 	fi
 
-	log_info "Disconnecting client $client_name..."
+	log_info "正在断开客户端 $client_name..."
 	if echo "kill $client_name" | socat - UNIX-CONNECT:"$mgmt_socket" >/dev/null 2>&1; then
-		log_success "Client $client_name disconnected."
+		log_success "客户端 $client_name 已断开。"
 	else
-		log_warn "Could not disconnect client (they may not be connected)."
+		log_warn "无法断开客户端（可能未连接）。"
 	fi
 }
 
@@ -4118,59 +4436,59 @@ function renewClient() {
 	local client_cert_duration_days
 	local auth_mode
 
-	log_header "Renew Client Certificate"
-	log_prompt "Select the existing client certificate you want to renew"
+	log_header "续期客户端证书"
+	log_prompt "请选择要续期的客户端证书"
 	selectClient "true"
 
 	# Allow user to specify renewal duration (use CLIENT_CERT_DURATION_DAYS env var for headless mode)
 	if [[ -z $CLIENT_CERT_DURATION_DAYS ]] || ! [[ $CLIENT_CERT_DURATION_DAYS =~ ^[0-9]+$ ]] || [[ $CLIENT_CERT_DURATION_DAYS -lt 1 ]]; then
 		log_menu ""
-		log_prompt "How many days should the renewed certificate be valid for?"
+		log_prompt "续期后的证书有效期为多少天？"
 		until [[ $client_cert_duration_days =~ ^[0-9]+$ ]] && [[ $client_cert_duration_days -ge 1 ]]; do
-			read -rp "Certificate validity (days): " -e -i $DEFAULT_CERT_VALIDITY_DURATION_DAYS client_cert_duration_days
+			read -rp "证书有效期（天）: " -e -i $DEFAULT_CERT_VALIDITY_DURATION_DAYS client_cert_duration_days
 		done
 	else
 		client_cert_duration_days=$CLIENT_CERT_DURATION_DAYS
 	fi
 
-	cd /etc/openvpn/server/easy-rsa/ || return
+	cd /etc/openvpn/easy-rsa/ || return
 	auth_mode=$(getAuthMode)
-	log_info "Renewing certificate for $CLIENT..."
+	log_info "正在续期客户端 $CLIENT 的证书..."
 
 	# Backup the old certificate before renewal
-	run_cmd "Backing up old certificate" cp "/etc/openvpn/server/easy-rsa/pki/issued/$CLIENT.crt" "/etc/openvpn/server/easy-rsa/pki/issued/$CLIENT.crt.bak"
+		run_cmd "备份旧证书" cp "/etc/openvpn/easy-rsa/pki/issued/$CLIENT.crt" "/etc/openvpn/easy-rsa/pki/issued/$CLIENT.crt.bak"
 
 	export EASYRSA_CERT_EXPIRE=$client_cert_duration_days
 
 	if [[ $auth_mode == "fingerprint" ]]; then
 		# Fingerprint mode: delete old cert, generate new self-signed, update fingerprint
 		removeCertFiles "$CLIENT"
-		run_cmd_fatal "Generating new certificate" ./easyrsa --batch self-sign-client "$CLIENT" nopass
+		run_cmd_fatal "生成新证书" ./easyrsa --batch self-sign-client "$CLIENT" nopass
 
 		local new_fingerprint
 		new_fingerprint=$(extractFingerprint "pki/issued/$CLIENT.crt")
 		if [[ -z "$new_fingerprint" ]]; then
-			log_fatal "Failed to extract new certificate fingerprint"
+			log_fatal "无法提取新证书指纹"
 		fi
-		log_info "New fingerprint: $new_fingerprint"
+		log_info "新指纹: $new_fingerprint"
 
 		# Update fingerprint in server.conf (comment line followed by fingerprint)
-		if grep -q "^# $CLIENT\$" /etc/openvpn/server/server.conf; then
-			sed -i "/^# $CLIENT\$/{n;s/.*/$new_fingerprint/}" /etc/openvpn/server/server.conf
+		if grep -q "^# $CLIENT\$" /etc/openvpn/server.conf; then
+			sed -i "/^# $CLIENT\$/{n;s/.*/$new_fingerprint/}" /etc/openvpn/server.conf
 		else
-			log_fatal "Client fingerprint entry not found in server.conf"
+			log_fatal "在 server.conf 中未找到该客户端指纹条目"
 		fi
 
 		# Reload OpenVPN to apply new fingerprint
-		if systemctl is-active --quiet openvpn-server@server; then
-			systemctl reload openvpn-server@server 2>/dev/null || systemctl restart openvpn-server@server
+		if systemctl is-active --quiet "$(getOpenVPNServiceUnit)"; then
+			systemctl reload "$(getOpenVPNServiceUnit)" 2>/dev/null || systemctl restart "$(getOpenVPNServiceUnit)"
 		fi
 	else
 		# PKI mode: use easyrsa renew
-		run_cmd_fatal "Renewing certificate" ./easyrsa --batch renew "$CLIENT"
+		run_cmd_fatal "续期证书" ./easyrsa --batch renew "$CLIENT"
 
 		# Revoke the old certificate
-		run_cmd_fatal "Revoking old certificate" ./easyrsa --batch revoke-renewed "$CLIENT"
+		run_cmd_fatal "吊销旧证书" ./easyrsa --batch revoke-renewed "$CLIENT"
 
 		# Regenerate the CRL
 		regenerateCRL
@@ -4180,70 +4498,70 @@ function renewClient() {
 	writeClientConfig "$CLIENT"
 
 	log_menu ""
-	log_success "Certificate for client $CLIENT renewed and is valid for $client_cert_duration_days days."
-	log_info "The new configuration file has been written to $GENERATED_CONFIG_PATH."
-	log_info "Download the new .ovpn file and import it in your OpenVPN client."
+	log_success "客户端 $CLIENT 的证书已续期，有效期为 $client_cert_duration_days 天。"
+	log_info "新配置文件已写入 $GENERATED_CONFIG_PATH。"
+	log_info "请下载新的 .ovpn 文件并导入到 OpenVPN 客户端。"
 }
 
 function renewServer() {
 	local server_name server_cert_duration_days auth_mode
 
-	log_header "Renew Server Certificate"
+	log_header "续期服务器证书"
 
 	# Determine auth mode
 	auth_mode=$(getAuthMode)
 
 	# Get the server name from the config (extract basename since path may be relative)
-	server_name=$(basename "$(grep '^cert ' /etc/openvpn/server/server.conf | cut -d ' ' -f 2)" .crt)
+	server_name=$(basename "$(grep '^cert ' /etc/openvpn/server.conf | cut -d ' ' -f 2)" .crt)
 	if [[ -z "$server_name" ]]; then
-		log_fatal "Could not determine server certificate name from /etc/openvpn/server/server.conf"
+		log_fatal "无法从 /etc/openvpn/server.conf 获取服务器证书名称"
 	fi
 
-	log_prompt "This will renew the server certificate: $server_name"
-	log_warn "The OpenVPN service will be restarted after renewal."
+	log_prompt "将续期服务器证书: $server_name"
+	log_warn "续期后将重启 OpenVPN 服务。"
 	if [[ "$auth_mode" == "fingerprint" ]]; then
-		log_warn "All client configurations will be regenerated with the new server fingerprint."
+		log_warn "所有客户端配置将使用新服务器指纹重新生成。"
 	fi
 	if [[ -z $CONTINUE ]]; then
-		read -rp "Do you want to continue? [y/n]: " -e -i n CONTINUE
+		read -rp "是否继续？[y/n]: " -e -i n CONTINUE
 	fi
 	if [[ $CONTINUE != "y" ]]; then
-		log_info "Renewal aborted."
+		log_info "已取消续期。"
 		return
 	fi
 
 	# Allow user to specify renewal duration (use SERVER_CERT_DURATION_DAYS env var for headless mode)
 	if [[ -z $SERVER_CERT_DURATION_DAYS ]] || ! [[ $SERVER_CERT_DURATION_DAYS =~ ^[0-9]+$ ]] || [[ $SERVER_CERT_DURATION_DAYS -lt 1 ]]; then
 		log_menu ""
-		log_prompt "How many days should the renewed certificate be valid for?"
+		log_prompt "续期后的证书有效期为多少天？"
 		until [[ $server_cert_duration_days =~ ^[0-9]+$ ]] && [[ $server_cert_duration_days -ge 1 ]]; do
-			read -rp "Certificate validity (days): " -e -i $DEFAULT_CERT_VALIDITY_DURATION_DAYS server_cert_duration_days
+			read -rp "证书有效期（天）: " -e -i $DEFAULT_CERT_VALIDITY_DURATION_DAYS server_cert_duration_days
 		done
 	else
 		server_cert_duration_days=$SERVER_CERT_DURATION_DAYS
 	fi
 
-	cd /etc/openvpn/server/easy-rsa/ || return
-	log_info "Renewing server certificate..."
+	cd /etc/openvpn/easy-rsa/ || return
+	log_info "正在续期服务器证书..."
 
 	export EASYRSA_CERT_EXPIRE=$server_cert_duration_days
 
 	if [[ "$auth_mode" == "fingerprint" ]]; then
 		# Fingerprint mode: delete old cert, generate new self-signed, update fingerprint
-		run_cmd "Backing up old certificate" cp "pki/issued/$server_name.crt" "pki/issued/$server_name.crt.bak"
+		run_cmd "备份旧证书" cp "pki/issued/$server_name.crt" "pki/issued/$server_name.crt.bak"
 		removeCertFiles "$server_name"
-		run_cmd_fatal "Generating new server certificate" ./easyrsa --batch self-sign-server "$server_name" nopass
+		run_cmd_fatal "生成新服务器证书" ./easyrsa --batch self-sign-server "$server_name" nopass
 
 		local new_fingerprint
 		new_fingerprint=$(extractFingerprint "pki/issued/$server_name.crt")
 		if [[ -z "$new_fingerprint" ]]; then
-			log_fatal "Failed to extract new server certificate fingerprint"
+			log_fatal "无法提取新服务器证书指纹"
 		fi
-		echo "$new_fingerprint" >/etc/openvpn/server/server-fingerprint
-		log_info "New server fingerprint: $new_fingerprint"
+		echo "$new_fingerprint" >/etc/openvpn/server-fingerprint
+		log_info "新服务器指纹: $new_fingerprint"
 
 		# Copy new cert and key, then regenerate client configs (they embed server fingerprint)
-		cp "pki/issued/$server_name.crt" "pki/private/$server_name.key" /etc/openvpn/server/
+		cp "pki/issued/$server_name.crt" "pki/private/$server_name.key" /etc/openvpn/
 		local client
 		for client in $(getClientsFromFingerprints); do
 			[[ -f "pki/issued/$client.crt" ]] && CLIENT="$client" writeClientConfig "$client"
@@ -4252,7 +4570,7 @@ function renewServer() {
 		# PKI mode: use standard easyrsa renew
 
 		# Backup the old certificate before renewal
-		run_cmd "Backing up old certificate" cp "/etc/openvpn/server/easy-rsa/pki/issued/$server_name.crt" "/etc/openvpn/server/easy-rsa/pki/issued/$server_name.crt.bak"
+		run_cmd "Backing up old certificate" cp "/etc/openvpn/easy-rsa/pki/issued/$server_name.crt" "/etc/openvpn/easy-rsa/pki/issued/$server_name.crt.bak"
 
 		# Renew the certificate (keeps the same private key)
 		export EASYRSA_CERT_EXPIRE=$server_cert_duration_days
@@ -4264,13 +4582,13 @@ function renewServer() {
 		# Regenerate the CRL
 		regenerateCRL
 
-		# Copy the new certificate to /etc/openvpn/server/
-		run_cmd_fatal "Copying new certificate" cp "/etc/openvpn/server/easy-rsa/pki/issued/$server_name.crt" /etc/openvpn/server/
+		# Copy the new certificate to /etc/openvpn/
+		run_cmd_fatal "Copying new certificate" cp "/etc/openvpn/easy-rsa/pki/issued/$server_name.crt" /etc/openvpn/
 	fi
 
 	# Restart OpenVPN
 	log_info "Restarting OpenVPN service..."
-	run_cmd "Restarting OpenVPN" systemctl restart openvpn-server@server
+	run_cmd "Restarting OpenVPN" systemctl restart "$(getOpenVPNServiceUnit)"
 
 	log_success "Server certificate renewed successfully and is valid for $server_cert_duration_days days."
 }
@@ -4315,11 +4633,11 @@ function renewMenu() {
 	log_header "Certificate Renewal"
 
 	# Get server certificate expiry for menu display (extract basename since path may be relative)
-	server_name=$(basename "$(grep '^cert ' /etc/openvpn/server/server.conf | cut -d ' ' -f 2)" .crt)
+	server_name=$(basename "$(grep '^cert ' /etc/openvpn/server.conf | cut -d ' ' -f 2)" .crt)
 	if [[ -z "$server_name" ]]; then
 		server_expiry="(unknown expiry)"
 	else
-		server_cert="/etc/openvpn/server/easy-rsa/pki/issued/$server_name.crt"
+		server_cert="/etc/openvpn/easy-rsa/pki/issued/$server_name.crt"
 		server_days=$(getDaysUntilExpiry "$server_cert")
 		server_expiry=$(formatExpiry "$server_days")
 	fi
@@ -4386,34 +4704,43 @@ function removeUnbound() {
 }
 
 function removeOpenVPN() {
-	log_header "Remove OpenVPN"
+	log_header "卸载 OpenVPN"
+	if [[ -d /etc/openvpn ]] && [[ -f /etc/openvpn/server.conf ]]; then
+		log_prompt "卸载前可先备份配置，便于日后恢复。是否先备份配置？[y/n]: "
+		read -rp "" -e -i n do_backup
+		if [[ ${do_backup,,} == "y" ]]; then
+			backupOpenVPNConfig
+		fi
+	fi
 	if [[ -z $REMOVE ]]; then
-		read -rp "Do you really want to remove OpenVPN? [y/n]: " -e -i n REMOVE
+		read -rp "确定要卸载 OpenVPN？[y/n]: " -e -i n REMOVE
 	fi
 	if [[ $REMOVE == 'y' ]]; then
 		# Get OpenVPN configuration
-		PORT=$(grep '^port ' /etc/openvpn/server/server.conf | cut -d " " -f 2)
-		PROTOCOL=$(grep '^proto ' /etc/openvpn/server/server.conf | cut -d " " -f 2)
+		PORT=$(grep '^port ' /etc/openvpn/server.conf | cut -d " " -f 2)
+		PROTOCOL=$(grep '^proto ' /etc/openvpn/server.conf | cut -d " " -f 2)
 		# Strip "6" suffix for firewall/SELinux commands (they expect "udp"/"tcp", not "udp6"/"tcp6")
 		PROTOCOL_BASE="${PROTOCOL%6}"
 		# Extract IPv4 subnet (may be empty if IPv4 not enabled)
-		VPN_SUBNET_IPV4=$(grep '^server ' /etc/openvpn/server/server.conf | cut -d " " -f 2)
+		VPN_SUBNET_IPV4=$(grep '^server ' /etc/openvpn/server.conf | cut -d " " -f 2)
 		# Extract IPv6 subnet (may be empty if IPv6 not enabled)
-		VPN_SUBNET_IPV6=$(grep '^server-ipv6 ' /etc/openvpn/server/server.conf | cut -d " " -f 2 | sed 's|/.*||')
+		VPN_SUBNET_IPV6=$(grep '^server-ipv6 ' /etc/openvpn/server.conf | cut -d " " -f 2 | sed 's|/.*||')
 
 		# Stop OpenVPN
-		log_info "Stopping OpenVPN service..."
-		run_cmd "Disabling OpenVPN service" systemctl disable openvpn-server@server
-		run_cmd "Stopping OpenVPN service" systemctl stop openvpn-server@server
-		# Remove customised service
-		run_cmd "Removing service file" rm -f /etc/systemd/system/openvpn-server@.service
+		log_info "正在停止 OpenVPN 服务..."
+		run_cmd "禁用 OpenVPN 服务" systemctl disable "$(getOpenVPNServiceUnit)"
+		run_cmd "停止 OpenVPN 服务" systemctl stop "$(getOpenVPNServiceUnit)"
+		# 仅删除本脚本复制的 unit（openvpn-server@.service）；openvpn@.service 为系统包提供，不删除
+		if [[ $(getOpenVPNServiceUnit) == "openvpn-server@server" ]] && [[ -f /etc/systemd/system/openvpn-server@.service ]]; then
+			run_cmd "删除服务文件" rm -f /etc/systemd/system/openvpn-server@.service
+		fi
 
 		# Remove firewall rules
-		log_info "Removing firewall rules..."
+		log_info "正在移除防火墙规则..."
 		if systemctl is-active --quiet firewalld && firewall-cmd --list-ports | grep -q "$PORT/$PROTOCOL_BASE"; then
 			# firewalld was used
-			run_cmd "Removing OpenVPN port from firewalld" firewall-cmd --permanent --remove-port="$PORT/$PROTOCOL_BASE"
-			run_cmd "Removing masquerade from firewalld" firewall-cmd --permanent --remove-masquerade
+			run_cmd "从 firewalld 移除 OpenVPN 端口" firewall-cmd --permanent --remove-port="$PORT/$PROTOCOL_BASE"
+			run_cmd "从 firewalld 移除 masquerade" firewall-cmd --permanent --remove-masquerade
 			# Remove IPv4 rich rule if configured
 			if [[ -n $VPN_SUBNET_IPV4 ]]; then
 				firewall-cmd --permanent --remove-rich-rule="rule family=\"ipv4\" source address=\"$VPN_SUBNET_IPV4/24\" accept" 2>/dev/null || true
@@ -4422,98 +4749,600 @@ function removeOpenVPN() {
 			if [[ -n $VPN_SUBNET_IPV6 ]]; then
 				firewall-cmd --permanent --remove-rich-rule="rule family=\"ipv6\" source address=\"${VPN_SUBNET_IPV6}/112\" accept" 2>/dev/null || true
 			fi
-			run_cmd "Reloading firewalld" firewall-cmd --reload
+			run_cmd "重载 firewalld" firewall-cmd --reload
 		elif [[ -f /etc/nftables/openvpn.nft ]]; then
 			# nftables was used
 			# Delete tables (suppress errors in case tables don't exist)
 			nft delete table inet openvpn 2>/dev/null || true
 			nft delete table ip openvpn-nat 2>/dev/null || true
 			nft delete table ip6 openvpn-nat 2>/dev/null || true
-			run_cmd "Removing include from nftables.conf" sed -i '/include.*openvpn\.nft/d' /etc/nftables.conf
-			run_cmd "Removing nftables rules file" rm -f /etc/nftables/openvpn.nft
+			run_cmd "从 nftables.conf 移除 include" sed -i '/include.*openvpn\.nft/d' /etc/nftables.conf
+			run_cmd "删除 nftables 规则文件" rm -f /etc/nftables/openvpn.nft
 		elif [[ -f /etc/systemd/system/iptables-openvpn.service ]]; then
 			# iptables was used
-			run_cmd "Stopping iptables service" systemctl stop iptables-openvpn
-			run_cmd "Disabling iptables service" systemctl disable iptables-openvpn
-			run_cmd "Removing iptables service file" rm /etc/systemd/system/iptables-openvpn.service
-			run_cmd "Reloading systemd" systemctl daemon-reload
-			run_cmd "Removing iptables add script" rm -f /etc/iptables/add-openvpn-rules.sh
-			run_cmd "Removing iptables rm script" rm -f /etc/iptables/rm-openvpn-rules.sh
+			run_cmd "停止 iptables 服务" systemctl stop iptables-openvpn
+			run_cmd "禁用 iptables 服务" systemctl disable iptables-openvpn
+			run_cmd "删除 iptables 服务文件" rm /etc/systemd/system/iptables-openvpn.service
+			run_cmd "重载 systemd" systemctl daemon-reload
+			run_cmd "删除 iptables 添加脚本" rm -f /etc/iptables/add-openvpn-rules.sh
+			run_cmd "删除 iptables 删除脚本" rm -f /etc/iptables/rm-openvpn-rules.sh
 		fi
 
 		# SELinux
 		if hash sestatus 2>/dev/null; then
 			if sestatus | grep "Current mode" | grep -qs "enforcing"; then
 				if [[ $PORT != '1194' ]]; then
-					run_cmd "Removing SELinux port" semanage port -d -t openvpn_port_t -p "$PROTOCOL_BASE" "$PORT"
+					run_cmd "移除 SELinux 端口" semanage port -d -t openvpn_port_t -p "$PROTOCOL_BASE" "$PORT"
 				fi
 			fi
 		fi
 
-		log_info "Removing OpenVPN package..."
+		log_info "正在卸载 OpenVPN 软件包..."
 		if [[ $OS =~ (debian|ubuntu) ]]; then
-			run_cmd "Removing OpenVPN" apt-get remove --purge -y openvpn
+			run_cmd "卸载 OpenVPN" apt-get remove --purge -y openvpn
 			# Remove OpenVPN official repository and GPG key
 			if [[ -e /etc/apt/sources.list.d/openvpn-aptrepo.list ]]; then
-				run_cmd "Removing OpenVPN repo" rm /etc/apt/sources.list.d/openvpn-aptrepo.list
+				run_cmd "删除 OpenVPN 源" rm /etc/apt/sources.list.d/openvpn-aptrepo.list
 			fi
 			if [[ -e /etc/apt/keyrings/openvpn-repo-public.asc ]]; then
-				run_cmd "Removing OpenVPN GPG key" rm /etc/apt/keyrings/openvpn-repo-public.asc
+				run_cmd "删除 OpenVPN GPG 密钥" rm /etc/apt/keyrings/openvpn-repo-public.asc
 			fi
-			run_cmd_fatal "Updating package lists" apt-get update
+			run_cmd_fatal "更新软件包列表" apt-get update
 		elif [[ $OS == 'arch' ]]; then
-			run_cmd "Removing OpenVPN" pacman --noconfirm -R openvpn
+			run_cmd "卸载 OpenVPN" pacman --noconfirm -R openvpn
 		elif [[ $OS =~ (centos|oracle) ]]; then
-			run_cmd "Removing OpenVPN" yum remove -y openvpn
+			run_cmd "卸载 OpenVPN" yum remove -y openvpn
 			# Disable Copr repo if it was enabled
 			if command -v dnf &>/dev/null; then
-				run_cmd "Disabling OpenVPN Copr repo" dnf copr disable -y @OpenVPN/openvpn-release-2.6 2>/dev/null || true
+				run_cmd "禁用 OpenVPN Copr 源" dnf copr disable -y @OpenVPN/openvpn-release-2.6 2>/dev/null || true
 			else
-				run_cmd "Disabling OpenVPN Copr repo" yum copr disable -y @OpenVPN/openvpn-release-2.6 2>/dev/null || true
+				run_cmd "禁用 OpenVPN Copr 源" yum copr disable -y @OpenVPN/openvpn-release-2.6 2>/dev/null || true
 			fi
 		elif [[ $OS == 'amzn2023' ]]; then
-			run_cmd "Removing OpenVPN" dnf remove -y openvpn
+			run_cmd "卸载 OpenVPN" dnf remove -y openvpn
 		elif [[ $OS == 'fedora' ]]; then
-			run_cmd "Removing OpenVPN" dnf remove -y openvpn
+			run_cmd "卸载 OpenVPN" dnf remove -y openvpn
 		elif [[ $OS == 'opensuse' ]]; then
-			run_cmd "Removing OpenVPN" zypper remove -y openvpn
+			run_cmd "卸载 OpenVPN" zypper remove -y openvpn
 		fi
 
 		# Cleanup
-		run_cmd "Removing client configs from /home" find /home/ -maxdepth 2 -name "*.ovpn" -delete
-		run_cmd "Removing client configs from /root" find /root/ -maxdepth 1 -name "*.ovpn" -delete
-		run_cmd "Removing /etc/openvpn" rm -rf /etc/openvpn
-		run_cmd "Removing OpenVPN docs" rm -rf /usr/share/doc/openvpn*
-		run_cmd "Removing sysctl config" rm -f /etc/sysctl.d/99-openvpn.conf
-		run_cmd "Removing OpenVPN logs" rm -rf /var/log/openvpn
+		run_cmd "删除 /home 下客户端配置" find /home/ -maxdepth 2 -name "*.ovpn" -delete
+		run_cmd "删除 /root 下客户端配置" find /root/ -maxdepth 1 -name "*.ovpn" -delete
+		run_cmd "删除 /etc/openvpn" rm -rf /etc/openvpn
+		run_cmd "删除 OpenVPN 文档" rm -rf /usr/share/doc/openvpn*
+		run_cmd "删除 sysctl 配置" rm -f /etc/sysctl.d/99-openvpn.conf
+		run_cmd "删除 OpenVPN 日志" rm -rf /var/log/openvpn
 
 		# Unbound
 		if [[ -e /etc/unbound/unbound.conf.d/openvpn.conf ]]; then
 			removeUnbound
 		fi
-		log_success "OpenVPN removed!"
+		log_success "OpenVPN 已卸载！"
 	else
-		log_info "Removal aborted!"
+		log_info "已取消卸载。"
 	fi
+}
+
+function setPushRoutes() {
+	local conf="/etc/openvpn/server.conf"
+	local push_routes_file="/etc/openvpn/push-routes"
+	local new_routes
+
+	# Show current: from push-routes file or parse server.conf
+	if [[ -f $push_routes_file ]] && [[ -s $push_routes_file ]]; then
+		log_prompt "当前走 VPN 的网段（network netmask）："
+		while IFS= read -r line; do
+			[[ -n $line ]] && log_prompt "  $line"
+		done < "$push_routes_file"
+	else
+		log_prompt "当前未设置走 VPN 的网段。"
+	fi
+	log_menu ""
+	log_prompt "请输入新的走 VPN 的网段（逗号分隔的 IPv4 CIDR，如 192.168.1.0/24,10.0.0.0/8，留空则清空）："
+	read -rp "走 VPN 的网段: " -e new_routes
+	new_routes=$(echo "$new_routes" | sed 's/,[[:space:]]*/,/g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+	# Build new block
+	local new_block_file
+	new_block_file=$(mktemp)
+	trap 'rm -f "$new_block_file"' RETURN
+	echo '# PUSH_ROUTES_START' > "$new_block_file"
+	: > "$push_routes_file"
+	if [[ -n $new_routes ]]; then
+		IFS=',' read -ra ROUTES <<< "$new_routes"
+		for r in "${ROUTES[@]}"; do
+			r=$(echo "$r" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+			[[ -z $r ]] && continue
+			parsed=$(parse_push_route_ipv4 "$r")
+			if [[ -n $parsed ]]; then
+				echo "push \"route $parsed\"" >> "$new_block_file"
+				echo "$parsed" >> "$push_routes_file"
+			fi
+		done
+	fi
+	echo '# PUSH_ROUTES_END' >> "$new_block_file"
+
+	# Replace block in server.conf
+	local start_ln end_ln insert_after
+	start_ln=$(grep -n '^# PUSH_ROUTES_START$' "$conf" | head -1 | cut -d: -f1)
+	if [[ -z $start_ln ]]; then
+		# Old install without markers: append block after last "push " line (push-routes file already written above)
+		local last_push_ln
+		last_push_ln=$(grep -n '^push "' "$conf" | tail -1 | cut -d: -f1)
+		if [[ -z $last_push_ln ]]; then
+			log_fatal "未在 server.conf 中找到 push 行，无法添加走 VPN 的网段。请用本脚本重新安装或手动编辑。"
+		fi
+		sed -i "${last_push_ln}r $new_block_file" "$conf"
+	else
+		end_ln=$(grep -n '^# PUSH_ROUTES_END$' "$conf" | head -1 | cut -d: -f1)
+		if [[ -z $end_ln ]]; then
+			log_fatal "未在 server.conf 中找到 # PUSH_ROUTES_END，请检查配置。"
+		fi
+		sed -i "${start_ln},${end_ln}d" "$conf"
+		insert_after=$((start_ln - 1))
+		sed -i "${insert_after}r $new_block_file" "$conf"
+	fi
+
+	log_info "正在重启 OpenVPN 服务以应用新路由..."
+	run_cmd "Restarting OpenVPN" systemctl restart "$(getOpenVPNServiceUnit)"
+	log_success "走 VPN 的网段已更新。"
+}
+
+# Output all client names (one per line) that have a cert in pki/issued, excluding server certs
+getClientNamesForRegen() {
+	local cert_dir="/etc/openvpn/easy-rsa/pki/issued"
+	local cert_file client_name
+	for cert_file in "$cert_dir"/*.crt; do
+		[[ ! -f "$cert_file" ]] && continue
+		client_name=$(basename "$cert_file" .crt)
+		[[ "$client_name" == server_* ]] && continue
+		[[ "$client_name" == *.bak ]] && continue
+		echo "$client_name"
+	done
+}
+
+function setListenPort() {
+	local conf="/etc/openvpn/server.conf"
+	local template="/etc/openvpn/client-template.txt"
+	local old_port new_port protocol protocol_base
+
+	old_port=$(grep '^port ' "$conf" | cut -d " " -f 2)
+	protocol=$(grep '^proto ' "$conf" | cut -d " " -f 2)
+	protocol_base="${protocol%6}"
+
+	log_prompt "当前监听端口: $old_port"
+	log_prompt "请输入新的端口 [1-65535]（直接回车取消）："
+	read -rp "新端口: " -e new_port
+	new_port=$(echo "$new_port" | tr -d '[:space:]')
+	[[ -z $new_port ]] && { log_info "已取消。"; return 0; }
+	if ! [[ "$new_port" =~ ^[0-9]+$ ]] || [[ "$new_port" -lt 1 ]] || [[ "$new_port" -gt 65535 ]]; then
+		log_fatal "无效端口: $new_port，须为 1-65535。"
+	fi
+	[[ "$new_port" == "$old_port" ]] && { log_info "端口未变更。"; return 0; }
+
+	# Update server.conf
+	run_cmd "更新 server.conf 端口" sed -i "s/^port .*/port $new_port/" "$conf"
+
+	# Update client-template.txt (remote IP PORT line)
+	if [[ -f $template ]]; then
+		run_cmd "更新客户端模板中的端口" sed -i "s/^remote \([^ ]*\) [0-9][0-9]*/remote \\1 $new_port/" "$template"
+	fi
+
+	# Firewall: remove old port, add new port
+	if systemctl is-active --quiet firewalld 2>/dev/null; then
+		run_cmd "从 firewalld 移除旧端口" firewall-cmd --permanent --remove-port="$old_port/$protocol_base" 2>/dev/null || true
+		run_cmd "在 firewalld 添加新端口" firewall-cmd --permanent --add-port="$new_port/$protocol_base"
+		run_cmd "重载 firewalld" firewall-cmd --reload
+	elif [[ -f /etc/nftables/openvpn.nft ]]; then
+		run_cmd "更新 nftables 规则中的端口" sed -i "s/dport $old_port/dport $new_port/g" /etc/nftables/openvpn.nft
+		run_cmd "重载 nftables" systemctl reload nftables
+	elif [[ -f /etc/iptables/add-openvpn-rules.sh ]]; then
+		run_cmd "移除旧 iptables 规则" /etc/iptables/rm-openvpn-rules.sh 2>/dev/null || true
+		run_cmd "更新 iptables 脚本中的端口" sed -i "s/--dport $old_port/--dport $new_port/g" /etc/iptables/add-openvpn-rules.sh /etc/iptables/rm-openvpn-rules.sh
+		run_cmd "添加新 iptables 规则" /etc/iptables/add-openvpn-rules.sh
+	fi
+
+	# SELinux: remove old custom port, add new if custom
+	if hash sestatus 2>/dev/null; then
+		if sestatus | grep "Current mode" | grep -qs "enforcing"; then
+			[[ $old_port != '1194' ]] && run_cmd "移除 SELinux 旧端口" semanage port -d -t openvpn_port_t -p "$protocol_base" "$old_port" 2>/dev/null || true
+			[[ $new_port != '1194' ]] && run_cmd "添加 SELinux 新端口" semanage port -a -t openvpn_port_t -p "$protocol_base" "$new_port" 2>/dev/null || true
+		fi
+	fi
+
+	# Restart OpenVPN
+	log_info "正在重启 OpenVPN 服务..."
+	run_cmd "重启 OpenVPN" systemctl restart "$(getOpenVPNServiceUnit)"
+
+	# Regenerate all existing client configs
+	local client count=0
+	cd /etc/openvpn/easy-rsa/ || return
+	for client in $(getClientNamesForRegen); do
+		[[ -z "$client" ]] && continue
+		[[ -f "pki/issued/$client.crt" ]] || continue
+		log_info "重新生成客户端配置: $client"
+		CLIENT="$client" writeClientConfig "$client"
+		((count++)) || true
+	done
+	cd - >/dev/null || true
+	log_success "监听端口已改为 $new_port；服务已重启，已重新生成 $count 个客户端配置文件。"
+}
+
+function setProtocol() {
+	local server_conf="/etc/openvpn/server.conf"
+	local template="/etc/openvpn/client-template.txt"
+	local old_proto new_proto new_proto_client port protocol_base choice
+	local is_ipv6=false
+
+	old_proto=$(grep '^proto ' "$server_conf" | cut -d " " -f 2)
+	port=$(grep '^port ' "$server_conf" | cut -d " " -f 2)
+	[[ "$old_proto" == *6 ]] && is_ipv6=true
+	protocol_base="${old_proto%6}"
+
+	log_prompt "当前协议: $old_proto（端口: $port）"
+	log_prompt "请选择新协议："
+	log_menu "   1) UDP"
+	log_menu "   2) TCP"
+	until [[ "${choice:-}" =~ ^[12]$ ]]; do
+		read -rp "请选择 [1-2]: " -e choice
+	done
+	if [[ $choice == "1" ]]; then
+		$is_ipv6 && new_proto="udp6" || new_proto="udp"
+		new_proto_client="proto $new_proto"
+	else
+		$is_ipv6 && new_proto="tcp6" || new_proto="tcp"
+		new_proto_client="proto ${new_proto}-client"
+	fi
+	[[ "$new_proto" == "$old_proto" ]] && { log_info "协议未变更。"; return 0; }
+
+	# Update server.conf
+	run_cmd "更新 server.conf 协议" sed -i "s/^proto .*/proto $new_proto/" "$server_conf"
+
+	# Update client-template.txt: replace proto line and explicit-exit-notify
+	if [[ -f $template ]]; then
+		sed -i "s/^proto .*/$new_proto_client/" "$template"
+		if [[ "$new_proto" == udp* ]]; then
+			grep -q '^explicit-exit-notify$' "$template" || sed -i "/^proto /a explicit-exit-notify" "$template"
+		else
+			sed -i '/^explicit-exit-notify$/d' "$template"
+		fi
+	fi
+
+	# Firewall: remove old port/protocol, add same port with new protocol
+	if systemctl is-active --quiet firewalld 2>/dev/null; then
+		run_cmd "从 firewalld 移除旧规则" firewall-cmd --permanent --remove-port="$port/$protocol_base" 2>/dev/null || true
+		run_cmd "在 firewalld 添加新协议规则" firewall-cmd --permanent --add-port="$port/${new_proto%6}"
+		run_cmd "重载 firewalld" firewall-cmd --reload
+	elif [[ -f /etc/nftables/openvpn.nft ]]; then
+		run_cmd "更新 nftables 规则中的协议" sed -i "s/ $old_proto dport/ $new_proto dport/g" /etc/nftables/openvpn.nft
+		run_cmd "重载 nftables" systemctl reload nftables
+	elif [[ -f /etc/iptables/add-openvpn-rules.sh ]]; then
+		run_cmd "移除旧 iptables 规则" /etc/iptables/rm-openvpn-rules.sh 2>/dev/null || true
+		run_cmd "更新 iptables 脚本中的协议" sed -i "s/-p $protocol_base/-p ${new_proto%6}/g" /etc/iptables/add-openvpn-rules.sh /etc/iptables/rm-openvpn-rules.sh
+		run_cmd "添加新 iptables 规则" /etc/iptables/add-openvpn-rules.sh
+	fi
+
+	# SELinux: update port type for new protocol
+	if hash sestatus 2>/dev/null; then
+		if sestatus | grep "Current mode" | grep -qs "enforcing"; then
+			[[ $port != '1194' ]] && run_cmd "移除 SELinux 旧协议端口" semanage port -d -t openvpn_port_t -p "$protocol_base" "$port" 2>/dev/null || true
+			[[ $port != '1194' ]] && run_cmd "添加 SELinux 新协议端口" semanage port -a -t openvpn_port_t -p "${new_proto%6}" "$port" 2>/dev/null || true
+		fi
+	fi
+
+	# Restart OpenVPN to apply protocol change
+	log_info "正在重启 OpenVPN 服务以使协议生效..."
+	run_cmd "重启 OpenVPN" systemctl restart "$(getOpenVPNServiceUnit)"
+
+	# Regenerate all existing client configs
+	local client count=0
+	cd /etc/openvpn/easy-rsa/ || return
+	for client in $(getClientNamesForRegen); do
+		[[ -z "$client" ]] && continue
+		[[ -f "pki/issued/$client.crt" ]] || continue
+		log_info "重新生成客户端配置: $client"
+		CLIENT="$client" writeClientConfig "$client"
+		((count++)) || true
+	done
+	cd - >/dev/null || true
+	log_success "协议已改为 $new_proto；服务已重启，已重新生成 $count 个客户端配置文件。"
+}
+
+function setPerfOpt() {
+	local server_conf="/etc/openvpn/server.conf"
+	local template="/etc/openvpn/client-template.txt"
+	local perf_opt_file="/etc/openvpn/perf-opt"
+	local current_opt new_opt
+	local start_ln end_ln insert_after
+	local tmp_block
+
+	tmp_block=$(mktemp) || log_fatal "无法创建临时文件"
+	trap 'rm -f "$tmp_block"' RETURN
+
+	# Read current PERF_OPT from file or infer from server.conf
+	if [[ -f $perf_opt_file ]]; then
+		current_opt=$(cat "$perf_opt_file")
+	else
+		if grep -q 'sndbuf 393216' "$server_conf" 2>/dev/null; then
+			current_opt=2
+		elif grep -q 'compress lz4-v2' "$server_conf" 2>/dev/null; then
+			current_opt=3
+		elif grep -q '^sndbuf ' "$server_conf" 2>/dev/null; then
+			current_opt=1
+		elif grep -q '^# PERF_SERVER_START$' "$server_conf" 2>/dev/null && ! grep -q '^sndbuf ' "$server_conf" 2>/dev/null && ! grep -q 'push "sndbuf' "$server_conf" 2>/dev/null; then
+			current_opt=2
+		else
+			current_opt=4
+		fi
+	fi
+	current_opt=${current_opt:-1}
+
+	log_prompt "当前性能优化: $current_opt（1=默认 2=高吞吐 3=低带宽 4=关闭）"
+	log_menu "   1) 默认：不压缩、系统缓冲区、mssfix 1400"
+	log_menu "   2) 高吞吐：精简配置（无 sndbuf/rcvbuf/mssfix，与高性能备份一致）"
+	log_menu "   3) 低带宽：启用 lz4 压缩"
+	log_menu "   4) 关闭：使用 OpenVPN 默认"
+	until [[ "${new_opt:-}" =~ ^[1-4]$ ]]; do
+		read -rp "请选择 [1-4]: " -e -i "$current_opt" new_opt
+	done
+	[[ "$new_opt" == "$current_opt" ]] && { log_info "未变更。"; return 0; }
+
+	# Replace server-side performance block
+	if grep -q '^# PERF_SERVER_START$' "$server_conf" 2>/dev/null; then
+		start_ln=$(grep -n '^# PERF_SERVER_START$' "$server_conf" | head -1 | cut -d: -f1)
+		end_ln=$(grep -n '^# PERF_SERVER_END$' "$server_conf" | head -1 | cut -d: -f1)
+		[[ -z $start_ln || -z $end_ln ]] && log_fatal "未找到性能优化标记，请检查 server.conf。"
+		: > "$tmp_block"
+		echo '# PERF_SERVER_START' >> "$tmp_block"
+		case "$new_opt" in
+		1) echo -e "# Performance: OS buffers, no compression, mssfix\nsndbuf 0\nrcvbuf 0\nallow-compression no\nmssfix 1400" >> "$tmp_block" ;;
+		2) ;;  # 高性能：不加 sndbuf/rcvbuf/mssfix，与精简备份一致
+		3) echo -e "# Performance: lz4 compression for low bandwidth\nsndbuf 0\nrcvbuf 0\ncompress lz4-v2\nmssfix 1400" >> "$tmp_block" ;;
+		4) ;;
+		esac
+		echo '# PERF_SERVER_END' >> "$tmp_block"
+		sed -i "${start_ln},${end_ln}d" "$server_conf"
+		insert_after=$((start_ln - 1))
+		sed -i "${insert_after}r $tmp_block" "$server_conf"
+	else
+		log_fatal "未找到 # PERF_SERVER_START 标记，无法修改。请用本脚本重新安装或手动编辑 server.conf。"
+	fi
+
+	# Replace push performance block
+	if grep -q '^# PERF_PUSH_START$' "$server_conf" 2>/dev/null; then
+		start_ln=$(grep -n '^# PERF_PUSH_START$' "$server_conf" | head -1 | cut -d: -f1)
+		end_ln=$(grep -n '^# PERF_PUSH_END$' "$server_conf" | head -1 | cut -d: -f1)
+		[[ -z $start_ln || -z $end_ln ]] && log_fatal "未找到 PERF_PUSH 标记，请检查 server.conf。"
+		: > "$tmp_block"
+		echo '# PERF_PUSH_START' >> "$tmp_block"
+		case "$new_opt" in
+		1) echo -e 'push "sndbuf 0"\npush "rcvbuf 0"\npush "allow-compression no"\npush "mssfix 1400"' >> "$tmp_block" ;;
+		2) ;;  # 高性能：不推送 sndbuf/rcvbuf/mssfix
+		3) echo -e 'push "compress lz4-v2"\npush "sndbuf 0"\npush "rcvbuf 0"\npush "mssfix 1400"' >> "$tmp_block" ;;
+		4) ;;
+		esac
+		echo '# PERF_PUSH_END' >> "$tmp_block"
+		sed -i "${start_ln},${end_ln}d" "$server_conf"
+		insert_after=$((start_ln - 1))
+		sed -i "${insert_after}r $tmp_block" "$server_conf"
+	fi
+
+	# Replace client template performance block
+	if [[ -f $template ]] && grep -q '^# PERF_CLIENT_START$' "$template" 2>/dev/null; then
+		start_ln=$(grep -n '^# PERF_CLIENT_START$' "$template" | head -1 | cut -d: -f1)
+		end_ln=$(grep -n '^# PERF_CLIENT_END$' "$template" | head -1 | cut -d: -f1)
+		[[ -n $start_ln && -n $end_ln ]] && {
+			: > "$tmp_block"
+			echo '# PERF_CLIENT_START' >> "$tmp_block"
+			case "$new_opt" in
+			2)
+				# 高性能：仅 route + pull-filter + route-nopull
+				if [[ -f /etc/openvpn/push-routes ]] && [[ -s /etc/openvpn/push-routes ]]; then
+					while IFS= read -r line; do
+						[[ -n $line ]] && echo "route $line" >> "$tmp_block"
+					done </etc/openvpn/push-routes
+				fi
+				echo 'pull-filter ignore "redirect-gateway"' >> "$tmp_block"
+				echo 'route-nopull' >> "$tmp_block"
+				;;
+			1|3) echo -e "# Performance: ignore redirect-gateway; buffers; mssfix\npull-filter ignore \"redirect-gateway\"\nsndbuf 0\nrcvbuf 0\nmssfix 1400" >> "$tmp_block" ;;
+			4) echo 'pull-filter ignore "redirect-gateway"' >> "$tmp_block" ;;
+			esac
+			echo '# PERF_CLIENT_END' >> "$tmp_block"
+			sed -i "${start_ln},${end_ln}d" "$template"
+			insert_after=$((start_ln - 1))
+			sed -i "${insert_after}r $tmp_block" "$template"
+		}
+	fi
+
+	echo "$new_opt" > "$perf_opt_file"
+
+	# Regenerate all client configs
+	local client count=0
+	cd /etc/openvpn/easy-rsa/ || return
+	for client in $(getClientNamesForRegen); do
+		[[ -z "$client" ]] && continue
+		[[ -f "pki/issued/$client.crt" ]] || continue
+		log_info "重新生成客户端配置: $client"
+		CLIENT="$client" writeClientConfig "$client"
+		((count++)) || true
+	done
+	cd - >/dev/null || true
+
+	log_info "正在重启 OpenVPN 服务..."
+	run_cmd "重启 OpenVPN" systemctl restart "$(getOpenVPNServiceUnit)"
+	log_success "性能优化已改为选项 $new_opt；已重新生成 $count 个客户端配置文件，服务已重启。"
+}
+
+function restartOpenVPN() {
+	log_info "正在重启 OpenVPN 服务..."
+	run_cmd "重启 OpenVPN" systemctl restart "$(getOpenVPNServiceUnit)"
+	log_success "OpenVPN 服务已重启。"
+}
+
+# 修复 systemd 服务：经典布局下确保使用 openvpn-server@server，从 /etc/openvpn 读取 server.conf
+function fixOpenVPNSystemdService() {
+	log_header "修复 OpenVPN systemd 服务"
+	if [[ ! -f /etc/openvpn/server.conf ]]; then
+		log_fatal "未找到 /etc/openvpn/server.conf，请确认由本脚本安装（经典布局）。"
+	fi
+	# 先停止并禁用旧名 openvpn@server（若存在），再使用 openvpn-server@server
+	run_cmd "禁用 openvpn@server（若存在）" systemctl disable openvpn@server 2>/dev/null || true
+	run_cmd "停止 openvpn@server（若存在）" systemctl stop openvpn@server 2>/dev/null || true
+
+	local unit="/etc/systemd/system/openvpn-server@.service"
+	if [[ ! -f $unit ]]; then
+		# 与安装逻辑一致：优先 openvpn@.service（Type=notify 等形式，性能更好）
+		log_prompt "未找到 $unit，将根据 openvpn@.service 创建并修补。"
+		if [[ -f /usr/lib/systemd/system/openvpn@.service ]]; then
+			SERVICE_SOURCE="/usr/lib/systemd/system/openvpn@.service"
+		elif [[ -f /lib/systemd/system/openvpn@.service ]]; then
+			SERVICE_SOURCE="/lib/systemd/system/openvpn@.service"
+		elif [[ -f /etc/systemd/system/openvpn@.service ]]; then
+			SERVICE_SOURCE="/etc/systemd/system/openvpn@.service"
+		elif [[ -f /usr/lib/systemd/system/openvpn-server@.service ]]; then
+			SERVICE_SOURCE="/usr/lib/systemd/system/openvpn-server@.service"
+		elif [[ -f /lib/systemd/system/openvpn-server@.service ]]; then
+			SERVICE_SOURCE="/lib/systemd/system/openvpn-server@.service"
+		else
+			log_fatal "未找到 openvpn@.service 或 openvpn-server@.service，无法创建 $unit。"
+		fi
+		run_cmd_fatal "复制并创建 openvpn-server@.service" cp "$SERVICE_SOURCE" "$unit"
+		grep -q "LimitNPROC" "$unit" && run_cmd "修补服务文件 (LimitNPROC)" sed -i 's|LimitNPROC|#LimitNPROC|' "$unit"
+	fi
+
+	log_prompt "修正 openvpn-server@.service 的工作目录与路径，使服务从 /etc/openvpn 读取 server.conf。"
+	grep -q "/etc/openvpn/server" "$unit" && run_cmd "修正 unit 中的路径" sed -i 's|/etc/openvpn/server|/etc/openvpn|g' "$unit"
+	if grep -q "WorkingDirectory=" "$unit"; then
+		run_cmd "修正 WorkingDirectory" sed -i 's|^WorkingDirectory=.*|WorkingDirectory=/etc/openvpn|' "$unit"
+	else
+		run_cmd "添加 WorkingDirectory" sed -i '/\[Service\]/a WorkingDirectory=/etc/openvpn' "$unit"
+	fi
+	run_cmd "重载 systemd" systemctl daemon-reload
+	run_cmd "启用并重启 OpenVPN" systemctl enable openvpn-server@server 2>/dev/null || true
+	run_cmd "重启 OpenVPN" systemctl restart openvpn-server@server
+	log_success "systemd 服务已修复并重启。若仍报错，请执行: systemctl status openvpn-server@server"
+}
+
+# 备份 OpenVPN 配置为压缩包（tar.gz）
+# 可选参数：输出路径或目录，默认当前目录
+function backupOpenVPNConfig() {
+	log_header "备份 OpenVPN 配置"
+	if [[ ! -d /etc/openvpn ]] || [[ ! -f /etc/openvpn/server.conf ]]; then
+		log_fatal "未找到 /etc/openvpn 或 server.conf，请确认已安装 OpenVPN。"
+	fi
+	local default_dir
+	default_dir=$(pwd)
+	[[ -d /root ]] && default_dir="/root"
+	local out_path="${1:-}"
+	if [[ -z $out_path ]]; then
+		local ts
+		ts=$(date +%Y%m%d-%H%M%S)
+		out_path="$default_dir/openvpn-backup-$ts.tar.gz"
+		log_prompt "备份将保存到: $out_path"
+		read -rp "可输入自定义路径（留空使用上述路径）: " -e out_custom
+		[[ -n $out_custom ]] && out_path="$out_custom"
+	fi
+	out_path=$(echo "$out_path" | sed 's|^[[:space:]]*||;s|[[:space:]]*$||')
+	[[ -z $out_path ]] && log_fatal "未指定备份路径。"
+	# 若为目录则在该目录下生成默认文件名
+	if [[ -d "$out_path" ]]; then
+		local ts
+		ts=$(date +%Y%m%d-%H%M%S)
+		out_path="$out_path/openvpn-backup-$ts.tar.gz"
+	fi
+	local out_dir
+	out_dir=$(dirname "$out_path")
+	[[ ! -d $out_dir ]] && run_cmd_fatal "创建输出目录" mkdir -p "$out_dir"
+	run_cmd_fatal "创建备份压缩包" tar -C / -czvf "$out_path" etc/openvpn
+	log_success "配置已备份到: $out_path"
+}
+
+# 从压缩包导入 OpenVPN 配置（覆盖现有 /etc/openvpn）
+# 支持直接输入文件路径，或输入目录后从列出的备份中选择
+function importOpenVPNConfig() {
+	log_header "导入 OpenVPN 配置"
+	local arch_path input_path
+	log_prompt "请输入备份文件路径，或输入目录以列出并选择备份文件: "
+	read -rp "" -e input_path
+	input_path=$(echo "$input_path" | sed 's|^[[:space:]]*||;s|[[:space:]]*$||')
+	[[ -z $input_path ]] && { log_error "未输入路径。"; return 1; }
+
+	if [[ -d $input_path ]]; then
+		# 目录：列出 .tar.gz / .tgz / .tar 文件供选择
+		local -a backups
+		local i choice
+		while IFS= read -r -d '' f; do
+			backups+=( "$f" )
+		done < <(find "$input_path" -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.tgz' -o -name '*.tar' \) -print0 2>/dev/null | sort -z)
+		[[ ${#backups[@]} -eq 0 ]] && log_fatal "该目录下未找到备份文件（.tar.gz / .tgz / .tar）。"
+		log_prompt "找到以下备份，请选择要恢复的序号（0 取消）:"
+		for i in "${!backups[@]}"; do
+			log_menu "   $((i + 1))) $(basename "${backups[$i]}")"
+		done
+		until [[ $choice =~ ^[0-9]+$ ]] && [[ $choice -ge 0 ]] && [[ $choice -le ${#backups[@]} ]]; do
+			read -rp "请选择 [0-${#backups[@]}]: " -e choice
+		done
+		[[ $choice -eq 0 ]] && { log_info "已取消。"; return 0; }
+		arch_path="${backups[$((choice - 1))]}"
+	else
+		arch_path="$input_path"
+	fi
+
+	[[ ! -f $arch_path ]] && log_fatal "文件不存在: $arch_path"
+	case "$arch_path" in
+		*.tar.gz|*.tgz|*.tar) ;;
+		*) log_fatal "仅支持 .tar.gz、.tgz 或 .tar 格式。";;
+	esac
+	if [[ -d /etc/openvpn ]] && [[ -f /etc/openvpn/server.conf ]]; then
+		log_prompt "当前已有配置，导入将先删除再恢复 /etc/openvpn。是否继续？[y/n]: "
+		read -rp "" -e confirm
+		[[ ${confirm,,} != "y" ]] && { log_info "已取消。"; return 0; }
+	fi
+	run_cmd "停止 OpenVPN 服务（若在运行）" systemctl stop "$(getOpenVPNServiceUnit)" 2>/dev/null || true
+	run_cmd "禁用 openvpn@server（若存在）" systemctl disable openvpn@server 2>/dev/null || true
+	[[ -d /etc/openvpn ]] && run_cmd "删除现有配置目录" rm -rf /etc/openvpn
+	log_info "正在解压备份到 /etc/openvpn ..."
+	if [[ $arch_path == *.tar ]]; then
+		run_cmd_fatal "解压备份" tar -C / -xvf "$arch_path"
+	else
+		run_cmd_fatal "解压备份" tar -C / -xzvf "$arch_path"
+	fi
+	if [[ ! -f /etc/openvpn/server.conf ]]; then
+		log_fatal "解压后未找到 /etc/openvpn/server.conf，请检查备份文件是否由本脚本生成。"
+	fi
+	run_cmd "重载 systemd" systemctl daemon-reload
+	run_cmd "启用 OpenVPN 服务" systemctl enable openvpn-server@server 2>/dev/null || true
+	run_cmd "启动 OpenVPN 服务" systemctl start openvpn-server@server 2>/dev/null || true
+	log_success "配置已导入。建议执行菜单「修复 OpenVPN systemd 服务」以确认服务单元正确。"
 }
 
 function manageMenu() {
 	local menu_option
 
-	log_header "OpenVPN Management"
-	log_prompt "The git repository is available at: https://github.com/angristan/openvpn-install"
-	log_success "OpenVPN is already installed."
+	log_header "OpenVPN 管理"
+	log_prompt "项目地址: https://github.com/angristan/openvpn-install"
+	log_success "OpenVPN 已安装。"
 	log_menu ""
-	log_prompt "What do you want to do?"
-	log_menu "   1) Add a new user"
-	log_menu "   2) List client certificates"
-	log_menu "   3) Revoke existing user"
-	log_menu "   4) Renew certificate"
-	log_menu "   5) Remove OpenVPN"
-	log_menu "   6) List connected clients"
-	log_menu "   7) Exit"
-	until [[ ${MENU_OPTION:-$menu_option} =~ ^[1-7]$ ]]; do
-		read -rp "Select an option [1-7]: " menu_option
+	log_prompt "请选择操作："
+	log_menu "   1) 添加新用户"
+	log_menu "   2) 列出客户端证书"
+	log_menu "   3) 吊销用户"
+	log_menu "   4) 续期证书"
+	log_menu "   5) 移除 OpenVPN"
+	log_menu "   6) 查看已连接客户端"
+	log_menu "   7) 修改走 VPN 的网段"
+	log_menu "   8) 修改监听端口"
+	log_menu "   9) 修改协议 (TCP/UDP)"
+	log_menu "  10) 修改性能优化"
+	log_menu "  11) 重启 OpenVPN 服务"
+	log_menu "  12) 修复 OpenVPN systemd 服务（WorkingDirectory 等）"
+	log_menu "  13) 备份配置（压缩包）"
+	log_menu "  14) 导入配置（从压缩包恢复）"
+	log_menu "  15) 退出"
+	until [[ ${MENU_OPTION:-$menu_option} =~ ^([1-9]|10|11|12|13|14|15)$ ]]; do
+		read -rp "请选择 [1-15]: " menu_option
 	done
 	menu_option="${MENU_OPTION:-$menu_option}"
 
@@ -4538,6 +5367,30 @@ function manageMenu() {
 		listConnectedClients
 		;;
 	7)
+		setPushRoutes
+		;;
+	8)
+		setListenPort
+		;;
+	9)
+		setProtocol
+		;;
+	10)
+		setPerfOpt
+		;;
+	11)
+		restartOpenVPN
+		;;
+	12)
+		fixOpenVPNSystemdService
+		;;
+	13)
+		backupOpenVPNConfig
+		;;
+	14)
+		importOpenVPNConfig
+		;;
+	15)
 		exit 0
 		;;
 	esac
