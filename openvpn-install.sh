@@ -3736,13 +3736,14 @@ function writeClientConfig() {
 	GENERATED_CONFIG_PATH="$clientFilePath"
 }
 
-# Helper function to regenerate the CRL after certificate changes
+# Helper function to regenerate the CRL after certificate changes.
+# Easy-RSA 3.x: 仅 revoke 会在数据库标记吊销，OpenVPN 需通过 CRL 拦截；必须 gen-crl 并分发到 /etc/openvpn/。
 function regenerateCRL() {
 	export EASYRSA_CRL_DAYS=$DEFAULT_CRL_VALIDITY_DURATION_DAYS
-	run_cmd_fatal "Regenerating CRL" ./easyrsa gen-crl
-	run_cmd "Removing old CRL" rm -f /etc/openvpn/crl.pem
-	run_cmd_fatal "Copying new CRL" cp /etc/openvpn/easy-rsa/pki/crl.pem /etc/openvpn/crl.pem
-	run_cmd "Setting CRL permissions" chmod 644 /etc/openvpn/crl.pem
+	run_cmd_fatal "生成新 CRL" ./easyrsa gen-crl
+	run_cmd "移除旧 CRL" rm -f /etc/openvpn/crl.pem
+	run_cmd_fatal "分发 CRL 到 OpenVPN 目录" cp /etc/openvpn/easy-rsa/pki/crl.pem /etc/openvpn/crl.pem
+	run_cmd "设置 CRL 权限" chmod 644 /etc/openvpn/crl.pem
 }
 
 # Helper function to generate .ovpn client config file
@@ -4385,8 +4386,8 @@ function revokeClient() {
 	log_info "正在吊销客户端 $CLIENT 的证书..."
 
 	if [[ $auth_mode == "pki" ]]; then
-		# PKI mode: use Easy-RSA revocation and CRL
-		run_cmd_fatal "吊销证书" ./easyrsa --batch revoke-issued "$CLIENT"
+		# PKI mode: Easy-RSA 3.x 使用 revoke（无需 revoke-issued），吊销后必须更新并分发 CRL
+		run_cmd_fatal "吊销证书" ./easyrsa --batch revoke "$CLIENT"
 		regenerateCRL
 		run_cmd "备份 index" cp /etc/openvpn/easy-rsa/pki/index.txt{,.bk}
 	else
@@ -4414,21 +4415,28 @@ function revokeClient() {
 	log_success "客户端 $CLIENT 的证书已吊销。"
 }
 
-# Disconnect a client via the management interface
+# Disconnect a client via the management interface; if socket unavailable, restart OpenVPN to drop all and reload CRL
 function disconnectClient() {
 	local client_name="$1"
 	local mgmt_socket="/var/run/openvpn-server/server.sock"
 
-	if [[ ! -S "$mgmt_socket" ]]; then
-		log_warn "未找到管理套接字。客户端可能在重连前仍处于连接状态。"
+	if [[ -S "$mgmt_socket" ]]; then
+		log_info "正在断开客户端 $client_name..."
+		if echo "kill $client_name" | socat - UNIX-CONNECT:"$mgmt_socket" >/dev/null 2>&1; then
+			log_success "客户端 $client_name 已断开。"
+		else
+			log_warn "无法通过管理接口断开（可能未连接）。"
+		fi
 		return 0
 	fi
 
-	log_info "正在断开客户端 $client_name..."
-	if echo "kill $client_name" | socat - UNIX-CONNECT:"$mgmt_socket" >/dev/null 2>&1; then
-		log_success "客户端 $client_name 已断开。"
+	# 未找到管理套接字时：重启 OpenVPN 可立即断开所有连接并加载新 CRL，吊销的客户端将无法重连
+	if systemctl is-active --quiet "$(getOpenVPNServiceUnit)" 2>/dev/null; then
+		log_warn "未找到管理套接字，改为重启 OpenVPN 服务以应用 CRL 并断开所有连接。"
+		run_cmd "重启 OpenVPN 以应用 CRL" systemctl restart "$(getOpenVPNServiceUnit)"
+		log_success "OpenVPN 已重启，已断开所有客户端；被吊销的证书将无法再连接。"
 	else
-		log_warn "无法断开客户端（可能未连接）。"
+		log_warn "未找到管理套接字且 OpenVPN 服务未运行。下次启动后将使用新 CRL。"
 	fi
 }
 
