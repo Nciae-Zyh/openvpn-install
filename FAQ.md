@@ -133,6 +133,15 @@ For most use cases (a few dozen Mbps to a few hundred Mbps), a well-configured V
 
 ---
 
+**Q:** 本机有多块网卡（同一局域网插了两个网口），安装后无法连接怎么办？
+
+**A:** 安装时脚本会检测默认路由对应的出口网卡；若存在多块网卡，会提示「请选择网卡」。请选择你希望用于 VPN 出口的那块网卡（即客户端访问服务器、以及 VPN 流量 NAT 出去时使用的网卡），选错可能导致无法连接或出口混乱。
+
+- **交互安装**：多网卡时会列出候选，可输入编号或网卡名，回车则保持当前检测结果。
+- **静默安装**：若未设置 `APPROVE_NIC` 且本机有多块网卡，安装开始前会**仅此一步**提示选择网卡，选完后继续静默安装；若已通过环境变量指定则不再提示：`APPROVE_NIC=eth1 ./openvpn-install.sh install ...`（将 `eth1` 换成实际网卡名）。
+
+---
+
 **Q:** What sysctl and firewall changes are made by the script?
 
 **A:** If firewalld is active, the script uses `firewall-cmd --permanent` to configure port, masquerade, and rich rules. Otherwise, iptables rules are saved at `/etc/iptables/add-openvpn-rules.sh` and `/etc/iptables/rm-openvpn-rules.sh`, managed by `/etc/systemd/system/iptables-openvpn.service`.

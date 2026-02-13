@@ -2766,6 +2766,7 @@ function installOpenVPN() {
 		log_info "  SERVER_CERT_DURATION_DAYS=$SERVER_CERT_DURATION_DAYS"
 		[[ -n $PUSH_ROUTES ]] && log_info "  PUSH_ROUTES=$PUSH_ROUTES"
 		log_info "  PERF_OPT=$PERF_OPT"
+		[[ -n ${APPROVE_NIC:-} ]] && log_info "  APPROVE_NIC=$APPROVE_NIC"
 	fi
 
 	# Get the "public" interface from the default route
@@ -2783,6 +2784,89 @@ function installOpenVPN() {
 		done
 		if [[ $CONTINUE == "n" ]]; then
 			exit 1
+		fi
+	fi
+
+	# Allow user to choose the priority NIC when multiple interfaces exist (e.g. same LAN on two ports)
+	# Build list of candidate interfaces (non-loopback, from ip link)
+	NIC_CANDIDATES=()
+	while IFS= read -r ifname; do
+		[[ -z $ifname ]] && continue
+		[[ $ifname == "lo" ]] && continue
+		NIC_CANDIDATES+=("$ifname")
+	done < <(ip -o link show 2>/dev/null | awk -F': ' '{print $2}' | awk -F'@' '{print $1}' | tr -d ' ')
+	# If NIC was empty but we have exactly one candidate, use it
+	if [[ -z $NIC ]] && [[ ${#NIC_CANDIDATES[@]} -eq 1 ]]; then
+		NIC="${NIC_CANDIDATES[0]}"
+		log_info "使用唯一可用网卡: $NIC"
+	fi
+	if [[ $NON_INTERACTIVE_INSTALL != "y" ]]; then
+		if [[ ${#NIC_CANDIDATES[@]} -gt 1 ]]; then
+			log_menu ""
+			if [[ -n $NIC ]]; then
+				log_prompt "当前检测到出口网卡: $NIC（默认路由）。"
+				log_prompt "若本机插有多块网卡且希望指定用于 VPN 出口的网卡，请选择；否则直接回车保持当前。"
+			else
+				log_prompt "未检测到默认路由，请从下列网卡中指定用于 VPN 出口的网卡："
+			fi
+			idx=1
+			for ifname in "${NIC_CANDIDATES[@]}"; do
+				mark=""
+				[[ $ifname == "$NIC" ]] && mark=" (当前默认)"
+				log_menu "   $idx) $ifname$mark"
+				((idx++)) || true
+			done
+			_req=""
+			[[ -z $NIC ]] && _req=" 必选"
+			read -rp "请选择网卡 [1-${#NIC_CANDIDATES[@]} 或 网卡名${_req}，回车保持 $NIC]: " -e NIC_CHOICE
+			NIC_CHOICE=$(echo "$NIC_CHOICE" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+			if [[ -n $NIC_CHOICE ]]; then
+				if [[ $NIC_CHOICE =~ ^[0-9]+$ ]] && [[ $NIC_CHOICE -ge 1 ]] && [[ $NIC_CHOICE -le ${#NIC_CANDIDATES[@]} ]]; then
+					NIC="${NIC_CANDIDATES[$((NIC_CHOICE - 1))]}"
+				elif ip link show "$NIC_CHOICE" &>/dev/null; then
+					NIC="$NIC_CHOICE"
+				else
+					log_warn "未找到网卡 \"$NIC_CHOICE\"，继续使用 $NIC。"
+				fi
+			fi
+			log_info "将使用出口网卡: $NIC"
+		fi
+	else
+		# Non-interactive: use APPROVE_NIC if set; otherwise prompt once for NIC when multiple interfaces exist
+		if [[ -n ${APPROVE_NIC:-} ]]; then
+			if ip link show "$APPROVE_NIC" &>/dev/null; then
+				NIC="$APPROVE_NIC"
+				log_info "使用指定出口网卡: $NIC"
+			else
+				log_warn "指定的网卡 APPROVE_NIC=$APPROVE_NIC 不存在，使用自动检测: $NIC"
+			fi
+		elif [[ ${#NIC_CANDIDATES[@]} -gt 1 ]]; then
+			# 静默安装前允许选择高优先级网口（仅此一步交互）；此处用 echo 输出，因 log_menu/log_prompt 在非交互模式下不显示
+			echo ""
+			if [[ -n $NIC ]]; then
+				echo -e "${COLOR_CYAN}当前检测到出口网卡: $NIC（默认路由）。请选择用于 VPN 的网卡（静默安装仅此一步需选择）：${COLOR_RESET}"
+			else
+				echo -e "${COLOR_CYAN}未检测到默认路由。请从下列网卡中指定用于 VPN 出口的网卡：${COLOR_RESET}"
+			fi
+			idx=1
+			for ifname in "${NIC_CANDIDATES[@]}"; do
+				mark=""
+				[[ $ifname == "$NIC" ]] && mark=" (当前默认)"
+				echo "   $idx) $ifname$mark"
+				((idx++)) || true
+			done
+			read -rp "请选择网卡 [1-${#NIC_CANDIDATES[@]} 或 网卡名，回车保持 $NIC]: " -e NIC_CHOICE
+			NIC_CHOICE=$(echo "$NIC_CHOICE" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+			if [[ -n $NIC_CHOICE ]]; then
+				if [[ $NIC_CHOICE =~ ^[0-9]+$ ]] && [[ $NIC_CHOICE -ge 1 ]] && [[ $NIC_CHOICE -le ${#NIC_CANDIDATES[@]} ]]; then
+					NIC="${NIC_CANDIDATES[$((NIC_CHOICE - 1))]}"
+				elif ip link show "$NIC_CHOICE" &>/dev/null; then
+					NIC="$NIC_CHOICE"
+				else
+					log_warn "未找到网卡 \"$NIC_CHOICE\"，继续使用 $NIC。"
+				fi
+			fi
+			log_info "将使用出口网卡: $NIC"
 		fi
 	fi
 
